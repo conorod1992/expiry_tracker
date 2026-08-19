@@ -55,18 +55,19 @@ Calendar-month offsets clamp safely at month ends. For example, one month before
 
 ## Sidebar
 
-The main view provides compact cards rather than an admin table. It shows category, expiry date, human time remaining, status, actionability, importance, and enabled state. Summary tiles show attention, urgent and expired counts plus the next expiry.
+The sidebar is organised around the next task instead of an administration table:
 
-Available controls include:
+- **Needs your attention** contains expired, urgent, or otherwise actionable items that have not been acknowledged.
+- **Coming up** contains enabled items approaching their expiry or action date, plus anything marked high priority.
+- **Later / inactive** keeps distant, acknowledged, and disabled items available without letting them dominate the page.
 
-- search across names, aliases, and categories
-- category, status, enabled/disabled, actionable-only, and important-only filters
-- sorting by next expiry, name, urgency, or actionable date
-- loading, error, filtered-empty, and first-run empty states
+Cards use friendly wording such as **All good**, **Coming up**, **Ready to deal with**, **Urgent**, and **Expired**, alongside locale-aware dates and relative phrases. Items needing attention expose **Mark as renewed** and **Acknowledge reminder** as quick actions. Acknowledging only clears the current reminder; it does not change the expiry date or record a renewal.
 
-The add/edit form uses date inputs, toggles, category suggestions, warning thresholds, progressive acknowledgement/escalation controls, and clear actionability choices. The detail view shows the calculated timeline, reminder policy, acknowledgement state, recurrence, bounded history, and all workflows.
+The compact filter area supports search, category, friendly status, enabled state, task state, priority, and sorting. It also includes clear loading, error, filtered-empty, and first-run empty states.
 
-Renew is emphasized when appropriate. It always records the previous expiry and resets acknowledgement and notification state. Without configured recurrence, a new date is required. With recurrence, the user must still explicitly select **Renew**—dates never advance silently.
+The add/edit form is split into Basic details, When can you deal with it?, Reminders, Renewal, and Advanced sections. Reminder thresholds are managed as individual schedule rows with common presets, while the calculated action date updates beside the controls. User-facing labels use **High priority** and **Create a Home Assistant sensor for this item**; lower-level identifiers remain tucked into Advanced.
+
+**Mark as renewed** always opens a confirmation dialog showing the previous expiry and an editable new date. A configured renewal period provides a suggested date, but the date never advances silently. Confirming records the previous expiry and resets acknowledgement and notification state.
 
 ## Entities
 
@@ -77,7 +78,7 @@ Renew is emphasized when appropriate. It always records the previous expiry and 
 - `sensor.expiry_tracker_expired` — expired count
 - `calendar.expiry_tracker` — enabled expiry dates
 
-When **Expose individual sensor** is enabled, the stable item UUID backs a date sensor whose bounded attributes include expiry, days remaining, status, actionable state/date, urgent date, acknowledgement, category, and importance.
+When **Create a Home Assistant sensor for this item** is enabled, the stable item UUID backs a date sensor whose bounded attributes include expiry, days remaining, status, actionable state/date, urgent date, acknowledgement, category, and importance.
 
 ## Actions
 
