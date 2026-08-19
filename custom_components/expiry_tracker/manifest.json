@@ -1,0 +1,14 @@
+{
+  "domain": "expiry_tracker",
+  "name": "Expiry Tracker",
+  "codeowners": ["@conorod1992"],
+  "config_flow": true,
+  "dependencies": ["frontend", "http", "websocket_api"],
+  "documentation": "https://github.com/conorod1992/expiry_tracker",
+  "integration_type": "service",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/conorod1992/expiry_tracker/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "1.0.0"
+}

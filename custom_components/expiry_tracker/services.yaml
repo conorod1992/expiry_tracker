@@ -1,0 +1,56 @@
+create_item:
+  name: Create item
+  description: Create a tracked expiry item.
+  fields:
+    name: {required: true, selector: {text: {}}}
+    expiry_date: {required: true, selector: {date: {}}}
+    category: {selector: {text: {}}}
+update_item:
+  name: Update item
+  description: Update explicit fields on an item using its stable ID.
+  fields:
+    item_id: {required: true, selector: {text: {}}}
+delete_item:
+  name: Delete item
+  description: Permanently delete one item by stable ID.
+  fields:
+    item_id: {required: true, selector: {text: {}}}
+renew_item:
+  name: Renew item
+  description: Retain the previous expiry in history, reset escalation state, and set a new expiry. The date may be omitted only when recurrence is explicitly configured.
+  fields:
+    item_id: {required: true, selector: {text: {}}}
+    new_expiry_date: {selector: {date: {}}}
+acknowledge_item:
+  name: Acknowledge item
+  description: Acknowledge attention without marking the item renewed.
+  fields:
+    item_id: {required: true, selector: {text: {}}}
+reset_acknowledgement:
+  name: Reset acknowledgement
+  description: Clear acknowledgement so attention and escalation can resume.
+  fields:
+    item_id: {required: true, selector: {text: {}}}
+search_items:
+  name: Search items
+  description: Search by name, alias, or category and return structured response data.
+  fields:
+    query: {required: true, selector: {text: {}}}
+get_upcoming:
+  name: Get upcoming expiries
+  description: Return enabled expiries inside a day horizon.
+get_actionable:
+  name: Get actionable items
+  description: Return unacknowledged items whose actionable window has begun.
+get_urgent:
+  name: Get urgent items
+  description: Return urgent or expired items.
+get_expired:
+  name: Get expired items
+  description: Return expired items.
+get_between:
+  name: Get items between dates
+  description: Return expiry dates inside an inclusive range.
+  fields:
+    start: {required: true, selector: {date: {}}}
+    end: {required: true, selector: {date: {}}}

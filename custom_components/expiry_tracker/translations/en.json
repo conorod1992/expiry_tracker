@@ -1,0 +1,21 @@
+{
+  "title": "Expiry Tracker",
+  "config": {
+    "step": {"user": {"title": "Set up Expiry Tracker", "description": "Create one local expiry collection. Items are managed from the Expiry Tracker sidebar."}},
+    "abort": {"single_instance_allowed": "Only one Expiry Tracker collection can be configured."}
+  },
+  "options": {
+    "step": {"init": {"title": "Expiry Tracker options", "data": {
+      "show_panel": "Show sidebar panel", "default_warning_thresholds": "Default warning thresholds (days)",
+      "default_urgent_days": "Default urgent threshold (days)", "notification_service": "Notification service (for example notify.mobile_app_phone)",
+      "notification_target": "Optional notification target"
+    }}}
+  },
+  "entity": {
+    "sensor": {
+      "next_expiry": {"name": "Next expiry"}, "next_actionable_expiry": {"name": "Next actionable expiry"},
+      "expiry_tracker_actionable": {"name": "Actionable"}, "expiry_tracker_urgent": {"name": "Urgent"},
+      "expiry_tracker_expired": {"name": "Expired"}
+    }
+  }
+}
