@@ -58,14 +58,15 @@ Calendar-month offsets clamp safely at month ends. For example, one month before
 The sidebar is organised around the next task instead of an administration table:
 
 - **Needs your attention** contains expired, urgent, or otherwise actionable items that have not been acknowledged.
+- **Acknowledged — still outstanding** keeps actionable, urgent, and expired items visible after their reminders have been acknowledged, with quick access to mark them as renewed or resume reminders.
 - **Coming up** contains enabled items approaching their expiry or action date, plus anything marked high priority.
-- **Later / inactive** keeps distant, acknowledged, and disabled items available without letting them dominate the page.
+- **Later / inactive** keeps distant and disabled items available without letting them dominate the page.
 
 Cards use friendly wording such as **All good**, **Coming up**, **Ready to deal with**, **Urgent**, and **Expired**, alongside locale-aware dates and relative phrases. Items needing attention expose **Mark as renewed** and **Acknowledge reminder** as quick actions. Acknowledging only clears the current reminder; it does not change the expiry date or record a renewal.
 
-The compact filter area supports search, category, friendly status, enabled state, task state, priority, and sorting. It also includes clear loading, error, filtered-empty, and first-run empty states.
+The compact filter area supports search, category, friendly status, enabled state, task state, priority, and sorting. It also includes clear loading, error, filtered-empty, and first-run empty states. Summary counts and the next expiry always describe the complete collection, even while the cards are filtered.
 
-The add/edit form is split into Basic details, When can you deal with it?, Reminders, Renewal, and Advanced sections. Reminder thresholds are managed as individual schedule rows with common presets, while the calculated action date updates beside the controls. User-facing labels use **High priority** and **Create a Home Assistant sensor for this item**; lower-level identifiers remain tucked into Advanced.
+The add/edit form is split into Basic details, When can you deal with it?, Reminders, Renewal, and Advanced sections. Reminder thresholds are managed as individual schedule rows with common presets or a custom whole number of days, while the calculated action date updates beside the controls. Items with no waiting period show **Any time** instead of exposing the backend's internal sentinel date. User-facing labels use **High priority** and **Create a Home Assistant sensor for this item**; lower-level identifiers remain tucked into Advanced.
 
 **Mark as renewed** always opens a confirmation dialog showing the previous expiry and an editable new date. A configured renewal period provides a suggested date, but the date never advances silently. Confirming records the previous expiry and resets acknowledgement and notification state.
 

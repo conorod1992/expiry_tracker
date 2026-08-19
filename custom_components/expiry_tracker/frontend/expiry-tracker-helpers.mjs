@@ -12,7 +12,16 @@ export function parseLocalDate(value) {
   if (!value) return null;
   const [year, month, day] = String(value).slice(0, 10).split("-").map(Number);
   if (!year || !month || !day) return null;
-  return new Date(year, month - 1, day, 12);
+  const parsed = new Date(2000, 0, 1, 12);
+  parsed.setFullYear(year, month - 1, day);
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+  return parsed;
 }
 
 export function toIsoDate(value) {
@@ -44,6 +53,10 @@ export function formatDateTime(value, locale) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(parsed);
+}
+
+export function formatActionableDate(mode, value, locale) {
+  return mode === "immediate" ? "Any time" : formatDate(value, locale);
 }
 
 export function relativeExpiry(days) {
@@ -91,6 +104,14 @@ export function recurrenceLabel(months) {
   return `${months} months`;
 }
 
+export function normalizeReminderThresholds(values) {
+  const thresholds = values.map(Number);
+  if (thresholds.some((value) => !Number.isInteger(value) || value < 0)) {
+    throw new TypeError("Reminder thresholds must be whole numbers of zero or more days");
+  }
+  return [...new Set(thresholds)].sort((left, right) => right - left);
+}
+
 export function addMonths(value, months) {
   const parsed = parseLocalDate(value);
   if (!parsed || !months) return "";
@@ -125,10 +146,13 @@ export function calculateActionDate(expiry, mode, amount, unit, specificDate) {
 }
 
 export function groupItems(items) {
-  const groups = { attention: [], comingUp: [], later: [] };
+  const groups = { attention: [], acknowledged: [], comingUp: [], later: [] };
   for (const item of items) {
-    if (item.enabled && item.requires_attention) {
+    const outstanding = ["actionable", "urgent", "expired"].includes(item.status);
+    if (item.enabled && !item.acknowledged && (item.requires_attention || outstanding)) {
       groups.attention.push(item);
+    } else if (item.enabled && item.acknowledged && outstanding) {
+      groups.acknowledged.push(item);
     } else if (
       item.enabled &&
       (item.status !== "valid" || item.important || item.days_until_expiry <= 180)
@@ -139,4 +163,15 @@ export function groupItems(items) {
     }
   }
   return groups;
+}
+
+export function summarizeItems(items) {
+  const enabled = items.filter((item) => item.enabled);
+  return {
+    attention: enabled.filter((item) => item.requires_attention).length,
+    urgent: enabled.filter((item) => item.status === "urgent").length,
+    next: enabled
+      .filter((item) => item.days_until_expiry >= 0)
+      .sort((left, right) => left.expiry_date.localeCompare(right.expiry_date))[0],
+  };
 }
