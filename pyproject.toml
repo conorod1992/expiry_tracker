@@ -10,7 +10,7 @@ authors = [{ name = "Conor" }]
 [project.optional-dependencies]
 dev = [
   "homeassistant>=2026.8.0",
-  "home-assistant-frontend>=20260801.0",
+  "home-assistant-frontend>=20260729.3",
   "pytest>=8.4,<10",
   "pytest-asyncio>=1.0,<2",
   "pytest-homeassistant-custom-component>=0.13.351,<0.14",
