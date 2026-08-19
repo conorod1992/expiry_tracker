@@ -3,7 +3,7 @@ name = "expiry-tracker"
 version = "1.0.0"
 description = "A local-first Home Assistant integration for expiries and actionable renewal deadlines"
 readme = "README.md"
-requires-python = ">=3.13.2"
+requires-python = ">=3.14.2"
 license = "MIT"
 authors = [{ name = "Conor" }]
 
