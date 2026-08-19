@@ -23,6 +23,7 @@ jobs:
       - run: ruff check .
       - run: mypy custom_components/expiry_tracker
       - run: node --check custom_components/expiry_tracker/frontend/expiry-tracker-panel.js
+      - run: node --test tests/frontend_helpers.test.mjs
 
   hassfest:
     runs-on: ubuntu-latest
