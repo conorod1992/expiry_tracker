@@ -16,15 +16,15 @@ from .const import (
     CONF_NOTIFICATION_TARGET,
     CONF_SHOW_PANEL,
     CONF_USE_REMINDERS,
-    DEFAULT_USE_REMINDERS,
     DEFAULT_NOTIFICATION_SERVICE,
     DEFAULT_SHOW_PANEL,
     DEFAULT_URGENT_DAYS,
+    DEFAULT_USE_REMINDERS,
     DEFAULT_WARNING_THRESHOLDS,
     DOMAIN,
     NAME,
-    REMINDERS_DOMAIN,
 )
+from .reminders import reminders_available
 
 
 class ExpiryTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -56,35 +56,35 @@ class ExpiryTrackerOptionsFlow(config_entries.OptionsFlow):
             return self.async_create_entry(title="", data=user_input)
         options = self.config_entry.options
         schema: dict[Any, Any] = {
-                    vol.Required(
-                        CONF_SHOW_PANEL, default=options.get(CONF_SHOW_PANEL, DEFAULT_SHOW_PANEL)
-                    ): bool,
-                    vol.Required(
-                        CONF_DEFAULT_WARNING_THRESHOLDS,
-                        default=options.get(
-                            CONF_DEFAULT_WARNING_THRESHOLDS, DEFAULT_WARNING_THRESHOLDS
-                        ),
-                    ): vol.All(
-                        cv.ensure_list,
-                        [vol.All(vol.Coerce(int), vol.Range(min=0, max=36500))],
-                    ),
-                    vol.Required(
-                        CONF_DEFAULT_URGENT_DAYS,
-                        default=options.get(CONF_DEFAULT_URGENT_DAYS, DEFAULT_URGENT_DAYS),
-                    ): vol.All(vol.Coerce(int), vol.Range(min=0, max=36500)),
-                    vol.Optional(
-                        CONF_NOTIFICATION_SERVICE,
-                        default=options.get(
-                            CONF_NOTIFICATION_SERVICE, DEFAULT_NOTIFICATION_SERVICE
-                        ),
-                    ): str,
-                    vol.Optional(
-                        CONF_NOTIFICATION_TARGET, default=options.get(CONF_NOTIFICATION_TARGET, "")
-                    ): str,
-                }
-        required = ("create", "list", "update", "delete")
-        if all(self.hass.services.has_service(REMINDERS_DOMAIN, service) for service in required):
-            schema[vol.Optional(CONF_USE_REMINDERS, default=options.get(CONF_USE_REMINDERS, DEFAULT_USE_REMINDERS))] = bool
+            vol.Required(
+                CONF_SHOW_PANEL, default=options.get(CONF_SHOW_PANEL, DEFAULT_SHOW_PANEL)
+            ): bool,
+            vol.Required(
+                CONF_DEFAULT_WARNING_THRESHOLDS,
+                default=options.get(CONF_DEFAULT_WARNING_THRESHOLDS, DEFAULT_WARNING_THRESHOLDS),
+            ): vol.All(
+                cv.ensure_list,
+                [vol.All(vol.Coerce(int), vol.Range(min=0, max=36500))],
+            ),
+            vol.Required(
+                CONF_DEFAULT_URGENT_DAYS,
+                default=options.get(CONF_DEFAULT_URGENT_DAYS, DEFAULT_URGENT_DAYS),
+            ): vol.All(vol.Coerce(int), vol.Range(min=0, max=36500)),
+            vol.Optional(
+                CONF_NOTIFICATION_SERVICE,
+                default=options.get(CONF_NOTIFICATION_SERVICE, DEFAULT_NOTIFICATION_SERVICE),
+            ): str,
+            vol.Optional(
+                CONF_NOTIFICATION_TARGET, default=options.get(CONF_NOTIFICATION_TARGET, "")
+            ): str,
+        }
+        if reminders_available(self.hass):
+            schema[
+                vol.Optional(
+                    CONF_USE_REMINDERS,
+                    default=options.get(CONF_USE_REMINDERS, DEFAULT_USE_REMINDERS),
+                )
+            ] = bool
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema(schema),

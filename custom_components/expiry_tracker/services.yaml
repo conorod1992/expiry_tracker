@@ -22,13 +22,13 @@ renew_item:
     item_id: {required: true, selector: {text: {}}}
     new_expiry_date: {selector: {date: {}}}
 acknowledge_item:
-  name: Acknowledge item
-  description: Acknowledge attention without marking the item renewed.
+  name: Dismiss current reminder
+  description: Dismiss the current attention stage without marking the item renewed. Later stages require attention again.
   fields:
     item_id: {required: true, selector: {text: {}}}
 reset_acknowledgement:
-  name: Reset acknowledgement
-  description: Clear acknowledgement so attention and escalation can resume.
+  name: Resume current reminder
+  description: Clear the current stage dismissal so attention and escalation can resume.
   fields:
     item_id: {required: true, selector: {text: {}}}
 search_items:

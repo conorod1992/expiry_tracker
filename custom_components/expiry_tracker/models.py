@@ -109,6 +109,7 @@ class ExpiryItem:
     repeat_until_acknowledged: bool = False
     repeat_interval_hours: int = 24
     acknowledged: bool = False
+    acknowledged_stage: str | None = None
     acknowledged_at: str | None = None
     recurrence_months: int | None = None
     last_notifications: dict[str, str] | None = None
@@ -168,6 +169,11 @@ class ExpiryItem:
         recurrence = data.get("recurrence_months")
         if recurrence is not None:
             recurrence = _positive_int(recurrence, "recurrence_months", minimum=1, maximum=1200)
+        acknowledged_stage = data.get("acknowledged_stage")
+        if acknowledged_stage not in {None, "actionable", "urgent", "expiry"}:
+            raise ItemValidationError(
+                "acknowledged_stage must be actionable, urgent, expiry, or null"
+            )
         last = data.get("last_notifications", {})
         if not isinstance(last, dict) or not all(
             isinstance(k, str) and isinstance(v, str) for k, v in last.items()
@@ -199,6 +205,7 @@ class ExpiryItem:
                 maximum=8760,
             ),
             acknowledged_at=_text(data.get("acknowledged_at"), "acknowledged_at"),
+            acknowledged_stage=acknowledged_stage,
             recurrence_months=recurrence,
             last_notifications=dict(last),
             history=_history(data.get("history")),
@@ -225,6 +232,7 @@ class ExpiryItem:
             "history",
             "last_notifications",
             "acknowledged",
+            "acknowledged_stage",
             "acknowledged_at",
         } & changes.keys()
         if forbidden:

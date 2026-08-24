@@ -1,6 +1,6 @@
 """Home Assistant adapter helpers."""
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -27,6 +27,11 @@ def get_manager(hass: HomeAssistant) -> ExpiryTrackerManager:
 
 def local_today() -> date:
     return dt_util.now().date()
+
+
+def local_date(value: datetime | None = None) -> date:
+    """Return a date in Home Assistant's configured local timezone."""
+    return dt_util.as_local(value).date() if value is not None else local_today()
 
 
 def parse_date(value: str, field: str) -> date:

@@ -49,7 +49,7 @@ These meanings are intentionally separate:
 | Actionable | The date on which the user can actually begin renewal or another task. Configure it as immediate, a day/month offset, or a specific date. |
 | Urgent | A higher-priority window near expiry. Urgent takes precedence over actionable. |
 
-`requires_attention` is true only when an enabled item is actionable (including urgent/expired) and has not been acknowledged. Acknowledgement quiets attention/escalation without pretending renewal happened. It never changes the expiry date or status.
+`requires_attention` is true only when an enabled item is in an actionable, urgent, or expiry attention stage that has not been dismissed. Dismissal is stage-specific: dismissing actionable quiets that stage, but urgent asks for attention again later, followed by the expiry stage. Dismissal never changes the expiry date or records a renewal.
 
 Calendar-month offsets clamp safely at month ends. For example, one month before 31 March is 28 February (29 in a leap year).
 
@@ -58,11 +58,11 @@ Calendar-month offsets clamp safely at month ends. For example, one month before
 The sidebar is organised around the next task instead of an administration table:
 
 - **Needs your attention** contains expired, urgent, or otherwise actionable items that have not been acknowledged.
-- **Acknowledged — still outstanding** keeps actionable, urgent, and expired items visible after their reminders have been acknowledged, with quick access to mark them as renewed or resume reminders.
+- **Dismissed — still outstanding** keeps items visible after the current reminder stage is dismissed, with quick access to mark them as renewed or resume that stage.
 - **Coming up** contains enabled items approaching their expiry or action date, plus anything marked high priority.
 - **Later / inactive** keeps distant and disabled items available without letting them dominate the page.
 
-Cards use friendly wording such as **All good**, **Coming up**, **Ready to deal with**, **Urgent**, and **Expired**, alongside locale-aware dates and relative phrases. Items needing attention expose **Mark as renewed** and **Acknowledge reminder** as quick actions. Acknowledging only clears the current reminder; it does not change the expiry date or record a renewal.
+Cards use friendly wording such as **All good**, **Coming up**, **Ready to deal with**, **Urgent**, and **Expired**, alongside locale-aware dates and relative phrases. Items needing attention expose **Mark as renewed** and **Dismiss reminder** as quick actions. Dismissal quiets only the current stage; it does not change the expiry date or record a renewal.
 
 The compact filter area supports search, category, friendly status, enabled state, task state, priority, and sorting. It also includes clear loading, error, filtered-empty, and first-run empty states. Summary counts and the next expiry always describe the complete collection, even while the cards are filtered.
 
@@ -115,7 +115,11 @@ response_variable: admin_due
 
 In integration options, set a Home Assistant notification service such as `notify.mobile_app_phone`. An optional target may also be supplied. Leave the service blank to keep built-in dispatch disabled and drive notifications entirely from automations using the sensors/actions.
 
-Per-item policy supports warning thresholds, first-actionable, urgent, and expiry notifications, acknowledgement, repeat-until-acknowledged, and a repeat interval. Each transition is deduplicated. The scheduler checks hourly; non-repeat events are recorded once, while repeat attention messages respect the configured interval and stop after acknowledgement. Notification history is bounded with the rest of item history.
+Per-item policy supports warning thresholds, first-actionable, urgent, and expiry notifications, stage-specific dismissal, repeat-until-dismissed, and a repeat interval. Each transition is deduplicated. The scheduler checks hourly; non-repeat events are recorded once, while repeat attention messages respect the configured interval and stop for the dismissed stage. Notification history is bounded with the rest of item history.
+
+With the optional Reminders backend, warning milestones are informational and do not expose generic completion. Actionable, urgent, and expiry milestones require dismissal, disable generic **Done**, and offer a source-owned **Renewed** action. **Dismiss** only quiets the matching stage. **Renewed** emits `expiry_tracker_renewal_requested` and creates a Home Assistant notification linking to the Expiry Tracker panel, where the existing renewal dialog suggests a recurrence-derived date when configured and still requires confirmation/editing. Home Assistant notification actions cannot directly open an interactive date picker, so selecting **Renewed** does not modify the item until that dialog is confirmed.
+
+An optional **In progress** workflow state is intentionally deferred. Adding it would introduce a separate state lifecycle and escalation policy beyond the focused stage-acknowledgement change; Expiry Tracker continues to distinguish only outstanding/dismissed from actually renewed.
 
 ## Assist / LLM access
 
