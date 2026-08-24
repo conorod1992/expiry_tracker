@@ -5,10 +5,11 @@ from __future__ import annotations
 import asyncio
 from collections import Counter
 from collections.abc import Awaitable, Callable, Mapping
-from datetime import date
+from contextlib import suppress
+from datetime import UTC, date, datetime
 from typing import Any, Protocol
 
-from .calculations import ExpiryState, add_months, calculate_state
+from .calculations import AttentionStage, ExpiryState, add_months, calculate_state
 from .const import MAX_HISTORY
 from .models import DuplicateItemIdError, ExpiryItem, ItemNotFoundError, utc_now_iso
 
@@ -39,12 +40,28 @@ class ExpiryTrackerManager:
     async def async_load(self) -> None:
         records = await self._storage.async_load()
         loaded: dict[str, ExpiryItem] = {}
+        migrated = False
         for record in records:
             item = ExpiryItem.from_dict(record)
+            if item.acknowledged and item.acknowledged_stage is None:
+                acknowledged_on = datetime.now(UTC).date()
+                if item.acknowledged_at:
+                    with suppress(ValueError):
+                        acknowledged_on = datetime.fromisoformat(
+                            item.acknowledged_at.replace("Z", "+00:00")
+                        ).date()
+                stage = calculate_state(item, acknowledged_on).attention_stage
+                if stage:
+                    item = ExpiryItem.from_dict(
+                        {**item.to_dict(), "acknowledged_stage": stage.value}
+                    )
+                    migrated = True
             if item.id in loaded:
                 raise DuplicateItemIdError(f"duplicate stored item ID: {item.id}")
             loaded[item.id] = item
         self._items = loaded
+        if migrated:
+            await self._storage.async_save(self._snapshot())
 
     def _snapshot(self) -> list[dict[str, Any]]:
         return [item.to_dict() for item in sorted(self._items.values(), key=lambda row: row.id)]
@@ -166,16 +183,35 @@ class ExpiryTrackerManager:
             raise
         return new
 
-    async def async_acknowledge(self, item_id: str, acknowledged: bool = True) -> ExpiryItem:
+    async def async_acknowledge(
+        self,
+        item_id: str,
+        acknowledged: bool = True,
+        stage: AttentionStage | str | None = None,
+    ) -> ExpiryItem:
         async with self._lock:
             old = self.get_item(item_id)
+            selected_stage = AttentionStage(stage) if stage is not None else None
+            if acknowledged and selected_stage is None:
+                selected_stage = calculate_state(old, datetime.now(UTC).date()).attention_stage
+            if acknowledged and selected_stage is None:
+                raise ValueError("only an active attention stage can be acknowledged")
+            acknowledged_stage: str | None = None
+            if acknowledged:
+                assert selected_stage is not None
+                acknowledged_stage = selected_stage.value
             now = utc_now_iso()
-            event = {"type": "acknowledged" if acknowledged else "acknowledgement_reset", "at": now}
+            event = {
+                "type": "acknowledged" if acknowledged else "acknowledgement_reset",
+                "at": now,
+                "stage": selected_stage.value if selected_stage else old.acknowledged_stage,
+            }
             item = await self._replace_workflow(
                 old,
                 {
                     **old.to_dict(),
                     "acknowledged": acknowledged,
+                    "acknowledged_stage": acknowledged_stage,
                     "acknowledged_at": now if acknowledged else None,
                     "history": [*old.history, event][-MAX_HISTORY:],
                     "updated_at": now,
@@ -209,6 +245,7 @@ class ExpiryTrackerManager:
                 **old.to_dict(),
                 "expiry_date": new_expiry_date.isoformat(),
                 "acknowledged": False,
+                "acknowledged_stage": None,
                 "acknowledged_at": None,
                 "last_notifications": {},
                 "history": history,

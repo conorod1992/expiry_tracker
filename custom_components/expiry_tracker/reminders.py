@@ -8,12 +8,13 @@ from typing import Any
 
 from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant
 
-from .calculations import ExpiryStatus, calculate_state
+from .calculations import AttentionStage, add_months, calculate_state
 from .const import (
     CONF_USE_REMINDERS,
     REMINDERS_DOMAIN,
     REMINDERS_LIFECYCLE_EVENT,
     REMINDERS_SOURCE,
+    RENEWAL_REQUESTED_EVENT,
 )
 from .helpers import local_today
 from .manager import ExpiryTrackerManager
@@ -21,6 +22,7 @@ from .models import ExpiryItem, ItemNotFoundError
 
 _LOGGER = logging.getLogger(__name__)
 _SERVICES = ("create", "list", "update", "delete")
+_RENEWED_ACTION = {"id": "renewed", "title": "Renewed"}
 
 
 def reminders_available(hass: HomeAssistant) -> bool:
@@ -41,39 +43,51 @@ class ReminderBackend:
         today = local_today()
         state = calculate_state(item, today)
         dates: dict[str, date] = {
-            **{f"warning_{days}": item.expiry_date - timedelta(days=days) for days in item.warning_thresholds},
+            **{
+                f"warning_{days}": item.expiry_date - timedelta(days=days)
+                for days in item.warning_thresholds
+            },
             "actionable": state.actionable_date,
             "urgent": state.urgent_date,
             "expiry": item.expiry_date,
         }
-        current = {
-            ExpiryStatus.EXPIRED: "expiry",
-            ExpiryStatus.URGENT: "urgent",
-            ExpiryStatus.ACTIONABLE: "actionable",
-        }.get(state.status)
+        current = state.attention_stage.value if state.attention_stage else None
         result: dict[str, dict[str, Any]] = {}
         for event, due_date in dates.items():
-            if due_date < today or (due_date == today and event != current and state.status != ExpiryStatus.WARNING):
+            warning = event.startswith("warning_")
+            if warning and (due_date < today or (due_date == today and current is not None)):
                 continue
-            if due_date == today and state.status == ExpiryStatus.WARNING and not event.startswith("warning_"):
+            if not warning and due_date <= today and event != current:
                 continue
-            if event.startswith("warning_"):
+            scheduled_date = today if event == current and due_date < today else due_date
+            if warning:
                 acknowledgement_policy: str = "not_required"
                 escalation: dict[str, int] | None = None
+                external_actions: list[dict[str, str]] = []
             elif event == "actionable":
-                acknowledgement_policy, escalation = "required", None
+                acknowledgement_policy = "required"
+                escalation = {
+                    "initial_delay_minutes": 240,
+                    "repeat_minutes": 720,
+                    "max_attempts": 2,
+                }
+                external_actions = [_RENEWED_ACTION]
             elif event == "urgent":
                 acknowledgement_policy = "required"
                 escalation = {"initial_delay_minutes": 60, "repeat_minutes": 240, "max_attempts": 3}
+                external_actions = [_RENEWED_ACTION]
             else:
                 acknowledgement_policy = "required"
                 escalation = {"initial_delay_minutes": 30, "repeat_minutes": 120, "max_attempts": 5}
+                external_actions = [_RENEWED_ACTION]
             result[event] = {
                 "title": f"Expiry Tracker: {item.name}",
                 "message": f"{item.name}: {event.replace('_', ' ')}. Expires {item.expiry_date.isoformat()}.",
-                "due": f"{due_date.isoformat()} 09:00:00",
+                "due": f"{scheduled_date.isoformat()} 09:00:00",
                 "acknowledgement_policy": acknowledgement_policy,
+                "allow_manual_completion": False,
                 "escalation": escalation,
+                "external_actions": external_actions,
                 "source": REMINDERS_SOURCE,
                 "source_id": item.id,
                 "source_event": event,
@@ -96,22 +110,42 @@ class ReminderBackend:
         due = str(reminder.get("due", "")).replace("T", " ")
         return all(
             reminder.get(key) == wanted[key]
-            for key in ("title", "message", "source", "source_id", "source_event", "managed_externally")
+            for key in (
+                "title",
+                "message",
+                "acknowledgement_policy",
+                "allow_manual_completion",
+                "escalation",
+                "external_actions",
+                "source",
+                "source_id",
+                "source_event",
+                "managed_externally",
+            )
         ) and due.startswith(wanted["due"][:10])
 
     async def async_reconcile(self, item: ExpiryItem | None) -> None:
         if not reminders_available(self.hass) or item is None:
             return
         try:
-            listed = await self._call("list", {"source": REMINDERS_SOURCE, "source_id": item.id}, response=True)
+            listed = await self._call(
+                "list", {"source": REMINDERS_SOURCE, "source_id": item.id}, response=True
+            )
             existing = listed.get("reminders", []) if isinstance(listed, dict) else []
             expected = self._milestones(item)
             grouped: dict[str, list[dict[str, Any]]] = {}
             for reminder in existing:
-                if reminder.get("source") == REMINDERS_SOURCE and reminder.get("source_id") == item.id:
+                if (
+                    reminder.get("source") == REMINDERS_SOURCE
+                    and reminder.get("source_id") == item.id
+                ):
                     grouped.setdefault(str(reminder.get("source_event")), []).append(reminder)
             for event, reminders in grouped.items():
-                keep = sorted(reminders, key=lambda value: self._id(value) or "")[0] if reminders else None
+                keep = (
+                    sorted(reminders, key=lambda value: self._id(value) or "")[0]
+                    if reminders
+                    else None
+                )
                 for duplicate in reminders[1:]:
                     if reminder_id := self._id(duplicate):
                         await self._call("delete", {"reminder_id": reminder_id})
@@ -130,11 +164,16 @@ class ReminderBackend:
         if not reminders_available(self.hass):
             return
         try:
-            listed = await self._call("list", {"source": REMINDERS_SOURCE, "source_id": item.id}, response=True)
+            listed = await self._call(
+                "list", {"source": REMINDERS_SOURCE, "source_id": item.id}, response=True
+            )
             for reminder in listed.get("reminders", []) if isinstance(listed, dict) else []:
-                if reminder.get("source") == REMINDERS_SOURCE and reminder.get("source_id") == item.id:
-                    if reminder_id := self._id(reminder):
-                        await self._call("delete", {"reminder_id": reminder_id})
+                if (
+                    reminder.get("source") == REMINDERS_SOURCE
+                    and reminder.get("source_id") == item.id
+                    and (reminder_id := self._id(reminder))
+                ):
+                    await self._call("delete", {"reminder_id": reminder_id})
         except Exception:
             _LOGGER.warning("Could not remove Expiry Tracker reminders", exc_info=True)
 
@@ -152,18 +191,52 @@ class ReminderBackend:
 
     async def async_lifecycle(self, event: Event[Any]) -> None:
         data = event.data
-        if data.get("source") != REMINDERS_SOURCE or data.get("action") != "acknowledged":
+        if data.get("source") != REMINDERS_SOURCE:
             return
         item_id = data.get("source_id")
-        if not isinstance(item_id, str):
+        source_event = data.get("source_event")
+        if not isinstance(item_id, str) or source_event not in {
+            stage.value for stage in AttentionStage
+        }:
             return
         try:
-            await self.manager.async_acknowledge(item_id)
+            item = self.manager.get_item(item_id)
         except ItemNotFoundError:
             return
+        if data.get("external_action_id") == "renewed":
+            await self._request_renewal(item)
+        elif data.get("action") in {"dismissed", "acknowledged"}:
+            await self.manager.async_acknowledge(item_id, stage=source_event)
+
+    async def _request_renewal(self, item: ExpiryItem) -> None:
+        """Guide the user to confirmation; an external action never renews silently."""
+        suggested = (
+            add_months(item.expiry_date, item.recurrence_months).isoformat()
+            if item.recurrence_months
+            else None
+        )
+        self.hass.bus.async_fire(
+            RENEWAL_REQUESTED_EVENT,
+            {"item_id": item.id, "suggested_expiry_date": suggested},
+        )
+        await self.hass.services.async_call(
+            "persistent_notification",
+            "create",
+            {
+                "notification_id": f"expiry_tracker_renewal_{item.id}",
+                "title": f"Confirm renewal: {item.name}",
+                "message": (
+                    "Renewed was selected, but the expiry has not changed. "
+                    f"[Open Expiry Tracker to confirm the new date](/expiry-tracker?renew={item.id})."
+                ),
+            },
+            blocking=True,
+        )
 
 
-async def async_setup_reminders(hass: HomeAssistant, entry: Any, manager: ExpiryTrackerManager) -> CALLBACK_TYPE | None:
+async def async_setup_reminders(
+    hass: HomeAssistant, entry: Any, manager: ExpiryTrackerManager
+) -> CALLBACK_TYPE | None:
     """Enable the adapter only when opted in and the public contract exists."""
     if not entry.options.get(CONF_USE_REMINDERS, False) or not reminders_available(hass):
         hass.data["expiry_tracker_reminders_active"] = False

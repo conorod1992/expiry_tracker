@@ -26,6 +26,7 @@ DEFAULT_USE_REMINDERS: Final = False
 REMINDERS_DOMAIN: Final = "reminders"
 REMINDERS_SOURCE: Final = "expiry_tracker"
 REMINDERS_LIFECYCLE_EVENT: Final = "reminders_lifecycle"
+RENEWAL_REQUESTED_EVENT: Final = "expiry_tracker_renewal_requested"
 
 PANEL_URL: Final = "expiry-tracker"
 PANEL_ELEMENT: Final = "expiry-tracker-panel"

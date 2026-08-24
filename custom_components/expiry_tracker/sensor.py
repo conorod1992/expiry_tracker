@@ -174,7 +174,10 @@ class ExpiryItemSensor(SensorEntity):
             "actionable": state.actionable,
             "actionable_date": state.actionable_date.isoformat(),
             "urgent_date": state.urgent_date.isoformat(),
-            "acknowledged": item.acknowledged,
+            "attention_stage": state.attention_stage.value if state.attention_stage else None,
+            "acknowledged": state.acknowledged,
+            "acknowledged_stage": item.acknowledged_stage,
+            "acknowledged_at": item.acknowledged_at,
             "category": item.category,
             "important": item.important,
         }

@@ -35,6 +35,7 @@ async def test_acknowledge_history_and_reset(manager):
     )
     acknowledged = await manager.async_acknowledge(item.id)
     assert acknowledged.acknowledged and acknowledged.acknowledged_at
+    assert acknowledged.acknowledged_stage == "actionable"
     assert acknowledged.history[-1]["type"] == "acknowledged"
     reset = await manager.async_acknowledge(item.id, False)
     assert not reset.acknowledged
@@ -50,6 +51,7 @@ async def test_renewal_resets_state_and_retains_history(manager):
     renewed = await manager.async_renew(item.id)
     assert renewed.expiry_date == date(2028, 8, 19)
     assert not renewed.acknowledged
+    assert renewed.acknowledged_stage is None
     assert renewed.last_notifications == {}
     assert renewed.history[-1]["previous_expiry_date"] == "2027-08-19"
 
@@ -89,3 +91,20 @@ async def test_atomic_rollback_on_save_failure():
     with pytest.raises(RuntimeError):
         await manager.async_delete_item(item.id)
     assert manager.get_item(item.id) == item
+
+
+async def test_legacy_acknowledgement_migrates_to_active_stage():
+    from custom_components.expiry_tracker.manager import ExpiryTrackerManager
+
+    from .conftest import MemoryStorage
+
+    record = {
+        **item_data(actionable_mode="immediate", acknowledged=True),
+        "id": "a6bdbf74-0608-4be2-a127-f3b1b969bd61",
+        "acknowledged_at": "2026-08-20T10:00:00Z",
+    }
+    storage = MemoryStorage([record])
+    loaded = ExpiryTrackerManager(storage, lambda: None)
+    await loaded.async_load()
+    assert loaded.list_items()[0].acknowledged_stage == "actionable"
+    assert storage.records[0]["acknowledged_stage"] == "actionable"

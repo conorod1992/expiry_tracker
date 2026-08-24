@@ -41,6 +41,23 @@ def test_warning_does_not_imply_actionable():
     assert state.requires_attention is False
 
 
+def test_acknowledgement_is_scoped_to_attention_stage():
+    actionable_ack = ExpiryItem.create(
+        item_data(
+            actionable_offset_value=30,
+            urgent_days_before=7,
+            acknowledged=True,
+            acknowledged_stage="actionable",
+        )
+    )
+    assert not calculate_state(actionable_ack, date(2027, 7, 20)).requires_attention
+    assert calculate_state(actionable_ack, date(2027, 8, 12)).requires_attention
+
+    urgent_ack = ExpiryItem.from_dict({**actionable_ack.to_dict(), "acknowledged_stage": "urgent"})
+    assert not calculate_state(urgent_ack, date(2027, 8, 12)).requires_attention
+    assert calculate_state(urgent_ack, date(2027, 8, 19)).requires_attention
+
+
 def test_actionability_modes_and_acknowledgement():
     immediate = ExpiryItem.create(item_data(actionable_mode="immediate", acknowledged=True))
     explicit = ExpiryItem.create(item_data(actionable_mode="date", actionable_from="2027-06-01"))
