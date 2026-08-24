@@ -24,6 +24,7 @@ from .const import (
 )
 from .manager import ExpiryTrackerManager
 from .notifications import async_setup_notifications
+from .reminders import async_setup_reminders
 from .services import async_register_services, async_unregister_services
 from .storage import ExpiryTrackerStorage
 from .websocket_api import async_register_websocket_commands
@@ -49,6 +50,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ExpiryTrackerConfigEntry
         async_register_websocket_commands(hass)
         hass.data[_WEBSOCKET] = True
     await async_register_services(hass)
+    if unsubscribe := await async_setup_reminders(hass, entry, manager):
+        entry.async_on_unload(unsubscribe)
     entry.async_on_unload(async_setup_notifications(hass, entry))
     await _setup_frontend(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -59,6 +62,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ExpiryTrackerConfigEntr
     result = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     frontend.async_remove_panel(hass, PANEL_URL, warn_if_unknown=False)
     async_unregister_services(hass)
+    hass.data["expiry_tracker_reminders_active"] = False
     return result
 
 

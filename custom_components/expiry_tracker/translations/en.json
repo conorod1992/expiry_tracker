@@ -8,7 +8,8 @@
     "step": {"init": {"title": "Expiry Tracker options", "data": {
       "show_panel": "Show sidebar panel", "default_warning_thresholds": "Default warning thresholds (days)",
       "default_urgent_days": "Default urgent threshold (days)", "notification_service": "Notification service (for example notify.mobile_app_phone)",
-      "notification_target": "Optional notification target"
+      "notification_target": "Optional notification target",
+      "use_reminders": "Use Reminders for notifications"
     }}}
   },
   "entity": {

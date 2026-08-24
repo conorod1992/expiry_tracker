@@ -17,6 +17,8 @@ async def async_process_notifications(hass: HomeAssistant) -> None:
     entries = hass.config_entries.async_entries("expiry_tracker")
     if not entries:
         return
+    if hass.data.get("expiry_tracker_reminders_active"):
+        return
     configured = entries[0].options.get(CONF_NOTIFICATION_SERVICE, "").strip()
     if not configured or "." not in configured:
         return

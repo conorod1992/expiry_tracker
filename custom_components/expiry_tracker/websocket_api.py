@@ -12,6 +12,7 @@ from homeassistant.components.websocket_api import ActiveConnection
 from homeassistant.core import HomeAssistant, callback
 
 from .const import BUILT_IN_CATEGORIES, MAX_LIST_LIMIT
+from .reminders import reminders_available
 from .helpers import decorate, get_entry, get_manager, local_today
 from .models import ItemNotFoundError, ItemValidationError
 from .schema import CREATE_FIELDS, UPDATE_FIELDS
@@ -197,7 +198,12 @@ def websocket_settings(
             "categories": list(BUILT_IN_CATEGORIES),
             "options": dict(get_entry(hass).options),
             "is_admin": bool(connection.user and connection.user.is_admin),
-            "capabilities": {"llm_read": True, "llm_mutation": False},
+            "capabilities": {
+                "llm_read": True,
+                "llm_mutation": False,
+                "reminders_available": reminders_available(hass),
+                "reminders_active": bool(hass.data.get("expiry_tracker_reminders_active")),
+            },
         },
     )
 

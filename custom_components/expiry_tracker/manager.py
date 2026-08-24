@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import Counter
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import date
 from typing import Any, Protocol
 
@@ -24,6 +24,17 @@ class ExpiryTrackerManager:
         self._notify = notify
         self._items: dict[str, ExpiryItem] = {}
         self._lock = asyncio.Lock()
+        self._change_listener: Callable[[str, ExpiryItem | None], Awaitable[None]] | None = None
+
+    def set_change_listener(
+        self, listener: Callable[[str, ExpiryItem | None], Awaitable[None]] | None
+    ) -> None:
+        """Set the optional external delivery reconciliation hook."""
+        self._change_listener = listener
+
+    async def _changed(self, action: str, item: ExpiryItem | None) -> None:
+        if self._change_listener:
+            await self._change_listener(action, item)
 
     async def async_load(self) -> None:
         records = await self._storage.async_load()
@@ -53,6 +64,7 @@ class ExpiryTrackerManager:
             except Exception:
                 self._items.pop(item.id, None)
                 raise
+        await self._changed("create", item)
         return item
 
     async def async_update_item(self, item_id: str, changes: Mapping[str, Any]) -> ExpiryItem:
@@ -65,6 +77,7 @@ class ExpiryTrackerManager:
             except Exception:
                 self._items[item_id] = old
                 raise
+        await self._changed("update", new)
         return new
 
     async def async_delete_item(self, item_id: str) -> ExpiryItem:
@@ -76,6 +89,7 @@ class ExpiryTrackerManager:
             except Exception:
                 self._items[item_id] = old
                 raise
+        await self._changed("delete", old)
         return old
 
     def get_item(self, item_id: str) -> ExpiryItem:
@@ -157,7 +171,7 @@ class ExpiryTrackerManager:
             old = self.get_item(item_id)
             now = utc_now_iso()
             event = {"type": "acknowledged" if acknowledged else "acknowledgement_reset", "at": now}
-            return await self._replace_workflow(
+            item = await self._replace_workflow(
                 old,
                 {
                     **old.to_dict(),
@@ -167,6 +181,8 @@ class ExpiryTrackerManager:
                     "updated_at": now,
                 },
             )
+        await self._changed("acknowledge", item)
+        return item
 
     async def async_renew(self, item_id: str, new_expiry_date: date | None = None) -> ExpiryItem:
         async with self._lock:
@@ -198,7 +214,9 @@ class ExpiryTrackerManager:
                 "history": history,
                 "updated_at": now,
             }
-            return await self._replace_workflow(old, payload)
+            item = await self._replace_workflow(old, payload)
+        await self._changed("renew", item)
+        return item
 
     async def async_record_notification(self, item_id: str, event_key: str, timestamp: str) -> None:
         async with self._lock:
