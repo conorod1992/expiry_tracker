@@ -16,10 +16,16 @@ CONF_DEFAULT_WARNING_THRESHOLDS: Final = "default_warning_thresholds"
 CONF_DEFAULT_URGENT_DAYS: Final = "default_urgent_days"
 CONF_NOTIFICATION_SERVICE: Final = "notification_service"
 CONF_NOTIFICATION_TARGET: Final = "notification_target"
+CONF_USE_REMINDERS: Final = "use_reminders"
 DEFAULT_SHOW_PANEL: Final = True
 DEFAULT_WARNING_THRESHOLDS: Final = [180, 90, 30, 7, 1]
 DEFAULT_URGENT_DAYS: Final = 7
 DEFAULT_NOTIFICATION_SERVICE: Final = ""
+DEFAULT_USE_REMINDERS: Final = False
+
+REMINDERS_DOMAIN: Final = "reminders"
+REMINDERS_SOURCE: Final = "expiry_tracker"
+REMINDERS_LIFECYCLE_EVENT: Final = "reminders_lifecycle"
 
 PANEL_URL: Final = "expiry-tracker"
 PANEL_ELEMENT: Final = "expiry-tracker-panel"

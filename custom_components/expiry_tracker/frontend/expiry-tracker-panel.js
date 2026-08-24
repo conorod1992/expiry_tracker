@@ -51,7 +51,7 @@ class ExpiryTrackerPanel extends HTMLElement {
     this.shadowRoot.innerHTML=`<style>${this.styles()}</style><div class="app">${this.headerView()}${this.errorView()}${this.loading?this.loadingView():this.currentView()}</div>${this.modalView()}${this.toast?`<div class="toast" role="status"><ha-icon icon="mdi:check-circle"></ha-icon>${this.esc(this.toast)}</div>`:""}`;
     this.bind();if(this.modal)this.focusModal();
   }
-  headerView(){return `<header class="page-header"><div><h1>Expiry Tracker</h1><p>Keep track of documents, policies and other things you don't want to let expire.</p></div>${this.settings.is_admin?'<button class="button primary" data-action="add"><ha-icon icon="mdi:plus"></ha-icon>Add item</button>':""}</header>`;}
+  headerView(){const delivery=this.settings.capabilities?.reminders_active?'<p><small>Delivery is provided by Reminders using your normal Reminders preferences.</small></p>':"";return `<header class="page-header"><div><h1>Expiry Tracker</h1><p>Keep track of documents, policies and other things you don't want to let expire.</p>${delivery}</div>${this.settings.is_admin?'<button class="button primary" data-action="add"><ha-icon icon="mdi:plus"></ha-icon>Add item</button>':""}</header>`;}
   errorView(){return this.error?`<div class="message error" role="alert"><ha-icon icon="mdi:alert-circle"></ha-icon><span>${this.esc(this.error)}</span><button class="text-button" data-action="retry">Retry</button></div>`:"";}
   loadingView(){return `<div class="loading" aria-live="polite"><div class="spinner"></div><p>Loading your items…</p></div>`;}
   currentView(){if(this.view==="form")return this.formView();if(this.view==="detail")return this.detailView(this.selected);return this.listView();}
