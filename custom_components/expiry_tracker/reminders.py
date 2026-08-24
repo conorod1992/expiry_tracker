@@ -21,8 +21,8 @@ from .manager import ExpiryTrackerManager
 from .models import ExpiryItem, ItemNotFoundError
 
 _LOGGER = logging.getLogger(__name__)
-_SERVICES = ("create", "list", "update", "delete")
-_RENEWED_ACTION = {"id": "renewed", "title": "Renewed"}
+_SERVICES = ("create", "list", "update", "delete", "external_action")
+_RENEWED_ACTION = {"id": "renewed", "label": "Renewed"}
 
 
 def reminders_available(hass: HomeAssistant) -> bool:

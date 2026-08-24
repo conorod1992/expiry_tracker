@@ -108,3 +108,49 @@ async def test_legacy_acknowledgement_migrates_to_active_stage():
     await loaded.async_load()
     assert loaded.list_items()[0].acknowledged_stage == "actionable"
     assert storage.records[0]["acknowledged_stage"] == "actionable"
+
+
+async def test_stage_inference_uses_injected_home_assistant_local_date():
+    from custom_components.expiry_tracker.manager import ExpiryTrackerManager
+
+    from .conftest import MemoryStorage
+
+    def just_after_local_midnight(_value=None):
+        return date(2027, 8, 19)
+
+    manager = ExpiryTrackerManager(MemoryStorage(), lambda: None, just_after_local_midnight)
+    await manager.async_load()
+    item = await manager.async_create_item(
+        item_data(expiry_date="2027-08-19", actionable_mode="immediate")
+    )
+    acknowledged = await manager.async_acknowledge(item.id)
+    assert acknowledged.acknowledged_stage == "expiry"
+
+
+async def test_legacy_migration_uses_local_date_of_acknowledgement():
+    from custom_components.expiry_tracker.manager import ExpiryTrackerManager
+
+    from .conftest import MemoryStorage
+
+    acknowledged_at = "2027-08-19T00:30:00Z"
+
+    def dublin_local_date(value=None):
+        return date(2027, 8, 18) if value is not None else date(2027, 8, 19)
+
+    storage = MemoryStorage(
+        [
+            {
+                **item_data(
+                    expiry_date="2027-08-19",
+                    actionable_mode="immediate",
+                    urgent_days_before=1,
+                    acknowledged=True,
+                    acknowledged_at=acknowledged_at,
+                ),
+                "id": "a6bdbf74-0608-4be2-a127-f3b1b969bd61",
+            }
+        ]
+    )
+    manager = ExpiryTrackerManager(storage, lambda: None, dublin_local_date)
+    await manager.async_load()
+    assert manager.list_items()[0].acknowledged_stage == "urgent"

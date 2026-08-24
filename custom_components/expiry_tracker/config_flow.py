@@ -23,8 +23,8 @@ from .const import (
     DEFAULT_WARNING_THRESHOLDS,
     DOMAIN,
     NAME,
-    REMINDERS_DOMAIN,
 )
+from .reminders import reminders_available
 
 
 class ExpiryTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -78,8 +78,7 @@ class ExpiryTrackerOptionsFlow(config_entries.OptionsFlow):
                 CONF_NOTIFICATION_TARGET, default=options.get(CONF_NOTIFICATION_TARGET, "")
             ): str,
         }
-        required = ("create", "list", "update", "delete")
-        if all(self.hass.services.has_service(REMINDERS_DOMAIN, service) for service in required):
+        if reminders_available(self.hass):
             schema[
                 vol.Optional(
                     CONF_USE_REMINDERS,

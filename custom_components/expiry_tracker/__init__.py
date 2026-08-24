@@ -22,6 +22,7 @@ from .const import (
     SIGNAL_UPDATED,
     VERSION,
 )
+from .helpers import local_date
 from .manager import ExpiryTrackerManager
 from .notifications import async_setup_notifications
 from .reminders import async_setup_reminders
@@ -36,7 +37,9 @@ _WEBSOCKET = f"{DOMAIN}_websocket_registered"
 
 async def async_setup_entry(hass: HomeAssistant, entry: ExpiryTrackerConfigEntry) -> bool:
     manager = ExpiryTrackerManager(
-        ExpiryTrackerStorage(hass), lambda: async_dispatcher_send(hass, SIGNAL_UPDATED)
+        ExpiryTrackerStorage(hass),
+        lambda: async_dispatcher_send(hass, SIGNAL_UPDATED),
+        local_date,
     )
     try:
         await manager.async_load()

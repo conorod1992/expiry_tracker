@@ -5,21 +5,28 @@ from types import SimpleNamespace
 
 import pytest
 
+from custom_components.expiry_tracker.const import CONF_USE_REMINDERS
 from custom_components.expiry_tracker.manager import ExpiryTrackerManager
-from custom_components.expiry_tracker.reminders import ReminderBackend, reminders_available
+from custom_components.expiry_tracker.reminders import (
+    ReminderBackend,
+    async_setup_reminders,
+    reminders_available,
+)
 
 from .conftest import MemoryStorage, item_data
 
 
 class Services:
-    def __init__(self, available=True):
+    def __init__(self, available=True, missing=()):
         self.available = available
+        self.missing = set(missing)
 
     def has_service(self, domain, service):
         return (
             self.available
             and domain == "reminders"
-            and service in {"create", "list", "update", "delete"}
+            and service in {"create", "list", "update", "delete", "external_action"}
+            and service not in self.missing
         )
 
     async def async_call(self, domain, service, data, **kwargs):
@@ -31,9 +38,19 @@ class Bus:
         self.last_event = (event_type, data)
 
 
-def test_capability_uses_only_public_services():
+def test_capability_requires_all_public_services():
     assert reminders_available(SimpleNamespace(services=Services()))
     assert not reminders_available(SimpleNamespace(services=Services(False)))
+    assert not reminders_available(SimpleNamespace(services=Services(missing={"external_action"})))
+
+
+async def test_missing_external_action_keeps_native_notifications_active():
+    manager = ExpiryTrackerManager(MemoryStorage(), lambda: None)
+    await manager.async_load()
+    hass = SimpleNamespace(services=Services(missing={"external_action"}), data={})
+    entry = SimpleNamespace(options={CONF_USE_REMINDERS: True})
+    assert await async_setup_reminders(hass, entry, manager) is None
+    assert hass.data["expiry_tracker_reminders_active"] is False
 
 
 @pytest.fixture
@@ -59,7 +76,7 @@ async def test_milestones_have_stable_source_identity_and_do_not_replay_past_war
     assert milestones["warning_7"]["acknowledgement_policy"] == "not_required"
     assert milestones["warning_7"]["allow_manual_completion"] is False
     assert milestones["warning_7"]["external_actions"] == []
-    assert milestones["actionable"]["external_actions"] == [{"id": "renewed", "title": "Renewed"}]
+    assert milestones["actionable"]["external_actions"] == [{"id": "renewed", "label": "Renewed"}]
     assert milestones["actionable"]["allow_manual_completion"] is False
 
 

@@ -19,10 +19,21 @@ class StorageProtocol(Protocol):
     async def async_save(self, records: list[dict[str, Any]]) -> None: ...
 
 
+def _system_local_date(value: datetime | None = None) -> date:
+    """Fallback for standalone users of the manager outside Home Assistant."""
+    return value.astimezone().date() if value is not None else datetime.now(UTC).astimezone().date()
+
+
 class ExpiryTrackerManager:
-    def __init__(self, storage: StorageProtocol, notify: Callable[[], None]) -> None:
+    def __init__(
+        self,
+        storage: StorageProtocol,
+        notify: Callable[[], None],
+        local_date: Callable[[datetime | None], date] = _system_local_date,
+    ) -> None:
         self._storage = storage
         self._notify = notify
+        self._local_date = local_date
         self._items: dict[str, ExpiryItem] = {}
         self._lock = asyncio.Lock()
         self._change_listener: Callable[[str, ExpiryItem | None], Awaitable[None]] | None = None
@@ -44,12 +55,12 @@ class ExpiryTrackerManager:
         for record in records:
             item = ExpiryItem.from_dict(record)
             if item.acknowledged and item.acknowledged_stage is None:
-                acknowledged_on = datetime.now(UTC).date()
+                acknowledged_on = self._local_date(None)
                 if item.acknowledged_at:
                     with suppress(ValueError):
-                        acknowledged_on = datetime.fromisoformat(
-                            item.acknowledged_at.replace("Z", "+00:00")
-                        ).date()
+                        acknowledged_on = self._local_date(
+                            datetime.fromisoformat(item.acknowledged_at.replace("Z", "+00:00"))
+                        )
                 stage = calculate_state(item, acknowledged_on).attention_stage
                 if stage:
                     item = ExpiryItem.from_dict(
@@ -193,7 +204,7 @@ class ExpiryTrackerManager:
             old = self.get_item(item_id)
             selected_stage = AttentionStage(stage) if stage is not None else None
             if acknowledged and selected_stage is None:
-                selected_stage = calculate_state(old, datetime.now(UTC).date()).attention_stage
+                selected_stage = calculate_state(old, self._local_date(None)).attention_stage
             if acknowledged and selected_stage is None:
                 raise ValueError("only an active attention stage can be acknowledged")
             acknowledged_stage: str | None = None
