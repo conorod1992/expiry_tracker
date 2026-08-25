@@ -1,6 +1,6 @@
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.expiry_tracker.const import DOMAIN
+from custom_components.expiry_tracker.const import CONF_USE_REMINDERS, DOMAIN
 from custom_components.expiry_tracker.manager import ExpiryTrackerManager
 from custom_components.expiry_tracker.websocket_api import async_register_websocket_commands
 
@@ -54,3 +54,39 @@ async def test_non_admin_reads_but_cannot_mutate(hass, hass_ws_client, hass_read
     )
     denied = await client.receive_json()
     assert not denied["success"] and denied["error"]["code"] == "unauthorized"
+
+
+async def test_settings_reports_native_delivery_when_reminders_are_inactive(hass, hass_ws_client):
+    client = await setup(hass, hass_ws_client)
+    await client.send_json_auto_id({"type": "expiry_tracker/settings"})
+    result = await client.receive_json()
+    assert result["success"]
+    assert result["result"]["capabilities"]["delivery_backend"] == "native"
+    assert not result["result"]["capabilities"]["reminders_available"]
+
+
+async def test_settings_reports_reminders_as_the_active_delivery_backend(hass, hass_ws_client):
+    client = await setup(hass, hass_ws_client)
+    hass.data["expiry_tracker_reminders_active"] = True
+    await client.send_json_auto_id({"type": "expiry_tracker/settings"})
+    result = await client.receive_json()
+    assert result["success"]
+    assert result["result"]["capabilities"]["delivery_backend"] == "reminders"
+
+
+async def test_settings_and_delivery_update_use_existing_reminders_option(hass, hass_ws_client):
+    client = await setup(hass, hass_ws_client)
+    for service in ("create", "list", "update", "delete", "external_action"):
+        hass.services.async_register("reminders", service, lambda call: None)
+    await client.send_json_auto_id({"type": "expiry_tracker/settings"})
+    available = await client.receive_json()
+    assert available["result"]["capabilities"]["reminders_available"]
+    await client.send_json_auto_id(
+        {"type": "expiry_tracker/update_delivery", CONF_USE_REMINDERS: True}
+    )
+    updated = await client.receive_json()
+    assert updated["success"]
+    assert updated["result"]["options"][CONF_USE_REMINDERS] is True
+    assert updated["result"]["capabilities"]["delivery_backend"] == "reminders"
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    assert entry.options == {CONF_USE_REMINDERS: True}
