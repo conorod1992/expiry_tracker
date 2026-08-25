@@ -1,107 +1,466 @@
 # Expiry Tracker
 
-Expiry Tracker is a local-first Home Assistant custom integration for passports, driving licences, insurance policies, medical cards, professional registrations, pet licences, certificates, warranties, domains, subscriptions, and other administrative deadlines.
+Expiry Tracker is a Home Assistant custom integration for keeping track of things that expire or need renewing.
 
-Its central question is not merely **“what expires soon?”** but **“what actually needs my attention now?”** An approaching expiry does not require action until its configured actionable window begins.
+It can be used for things such as:
 
-## Highlights
+- Passports and driving licences
+- Insurance policies
+- Medical or GP cards
+- Professional registrations
+- Pet licences
+- Certificates
+- Warranties
+- Domains and subscriptions
+- Almost anything else with an expiry or renewal date
 
-- Polished, responsive, build-free sidebar with search, filters, sorting, detail views, guided forms, renewal, acknowledgement, history, and accessible keyboard navigation
-- Stable immutable UUIDs; renaming never creates a new entity
-- Explicit warning, actionable, urgent, and expiry dates
-- Aggregate sensors, optional per-item sensors, and an expiry calendar
-- Structured mutation and response-data query actions
-- Read-only Assist/LLM tool designed to favour items that genuinely need attention
-- Versioned, bounded, concurrency-safe local storage; no account, cloud, telemetry, or external network access
-- Notification transition deduplication and optional repeat-until-acknowledged escalation through a normal Home Assistant notification service
+Expiry Tracker does more than tell you **what expires next**. It can also tell you **what actually needs your attention now**.
 
-## Installation and setup
+For example, your passport might expire in nine months, but if you can renew it now, Expiry Tracker can already treat it as something you can deal with. Another item might expire sooner but not be renewable yet.
+
+Everything is stored locally in Home Assistant. Expiry Tracker does not require an account or external cloud service.
+
+## Features
+
+- Dedicated **Expiry Tracker** page in the Home Assistant sidebar
+- Warning, actionable, urgent and expiry dates
+- Clear **Needs your attention**, **Coming up** and **Later** sections
+- Search, filtering and sorting
+- Renewal history
+- Optional Home Assistant notifications
+- Optional repeating reminders until you dismiss them
+- Home Assistant sensors and calendar
+- Optional sensor for each individual item
+- Actions for use in automations
+- Read-only Assist/LLM access where supported
+- Local storage with no telemetry or external network access
+
+---
+
+## Installation
 
 ### HACS
 
-1. In HACS, add `https://github.com/conorod1992/expiry_tracker` as a custom integration repository.
-2. Install **Expiry Tracker** and restart Home Assistant.
-3. Go to **Settings → Devices & services → Add integration**, search for **Expiry Tracker**, and add it.
-4. Open **Expiry Tracker** in the sidebar and add items.
+Expiry Tracker can be installed as a custom repository in HACS.
 
-### Manual
+1. Open **HACS** in Home Assistant.
+2. Open the **⋮** menu in the top-right corner.
+3. Select **Custom repositories**.
+4. Enter:
 
-Copy `custom_components/expiry_tracker` into your Home Assistant `config/custom_components` directory, restart, and add the integration from Devices & services.
+   `https://github.com/conorod1992/expiry_tracker`
 
-The integration creates one collection-level config entry. Individual records are deliberately managed in the dedicated sidebar or through structured actions—not as dozens of helpers/config entries.
+5. Select **Integration** as the repository type.
+6. Select **Add**.
+7. Find **Expiry Tracker** in HACS and install it.
+8. Restart Home Assistant when prompted.
+9. Go to **Settings → Devices & services**.
+10. Select **Add integration**.
+11. Search for **Expiry Tracker** and add it.
 
-## Status model
+Expiry Tracker will then appear in the Home Assistant sidebar.
 
-Every enabled item has exactly one derived status. Precedence is:
+> If Expiry Tracker does not appear when searching for it after installation, first make sure Home Assistant has been restarted. Refreshing or clearing your browser cache can also help after installing a new custom integration.
 
-1. `expired` — today is after the expiry date
-2. `urgent` — the urgent window has begun, including the expiry day
-3. `actionable` — action can now be taken
-4. `warning` — advance notice has begun, but the item is not yet actionable
-5. `valid` — none of the above
+### Manual installation
 
-These meanings are intentionally separate:
+Download or copy the `expiry_tracker` integration folder into:
 
-| Concept | Meaning |
+```text
+config/custom_components/expiry_tracker
+```
+
+The final folder should therefore contain files such as:
+
+```text
+config/
+└── custom_components/
+    └── expiry_tracker/
+        ├── __init__.py
+        ├── manifest.json
+        └── ...
+```
+
+Restart Home Assistant, then go to:
+
+**Settings → Devices & services → Add integration**
+
+Search for **Expiry Tracker** and add it.
+
+---
+
+# Getting started
+
+Once installed, open **Expiry Tracker** from the Home Assistant sidebar and select the option to add your first item.
+
+For most items, you only need to decide:
+
+1. **What is it?**
+2. **When does it expire?**
+3. **When would you like advance warning?**
+4. **When can you actually do something about it?**
+5. **When should it become urgent?**
+
+The last two are optional, but they are what allow Expiry Tracker to distinguish between something that is simply approaching its expiry date and something that genuinely needs attention.
+
+## A simple example
+
+Suppose a passport expires on **30 November**.
+
+You might configure:
+
+- **Expiry:** 30 November
+- **Actionable:** 9 months before expiry
+- **Warning:** 12 months before expiry
+- **Urgent:** 3 months before expiry
+
+Expiry Tracker can then distinguish between:
+
+**Warning**  
+> Your passport is getting closer to expiry, but you may not need to do anything yet.
+
+**Ready to deal with**  
+> Renewal is now possible, so this is something you can act on.
+
+**Urgent**  
+> The expiry is getting close and should receive higher priority.
+
+**Expired**  
+> The expiry date has passed.
+
+You do not have to use every stage. The settings can be as simple or detailed as you need.
+
+---
+
+# Understanding statuses
+
+Every enabled item has one current status.
+
+| Status | What it means |
 |---|---|
-| Expiry date | The last date the item remains valid. It becomes `expired` the following day. |
-| Warning | Advance awareness. A warning alone does **not** mean action is possible. Multiple thresholds such as 180, 90, 30, 7, and 1 days are supported. |
-| Actionable | The date on which the user can actually begin renewal or another task. Configure it as immediate, a day/month offset, or a specific date. |
-| Urgent | A higher-priority window near expiry. Urgent takes precedence over actionable. |
+| **All good** | Nothing needs attention yet. |
+| **Coming up** | A warning period has begun, but you cannot or do not need to act yet. |
+| **Ready to deal with** | The item has reached the date from which you can take action. |
+| **Urgent** | The item is close enough to expiry to be treated as higher priority. |
+| **Expired** | The expiry date has passed. |
 
-`requires_attention` is true only when an enabled item is in an actionable, urgent, or expiry attention stage that has not been dismissed. Dismissal is stage-specific: dismissing actionable quiets that stage, but urgent asks for attention again later, followed by the expiry stage. Dismissal never changes the expiry date or records a renewal.
+Internally these correspond to `valid`, `warning`, `actionable`, `urgent` and `expired`.
 
-Calendar-month offsets clamp safely at month ends. For example, one month before 31 March is 28 February (29 in a leap year).
+### Expiry date
 
-## Sidebar
+The expiry date is the **last date on which the item is still valid**.
 
-The sidebar is organised around the next task instead of an administration table:
+For example, something with an expiry date of 30 November becomes expired on 1 December.
 
-- **Needs your attention** contains expired, urgent, or otherwise actionable items that have not been acknowledged.
-- **Dismissed — still outstanding** keeps items visible after the current reminder stage is dismissed, with quick access to mark them as renewed or resume that stage.
-- **Coming up** contains enabled items approaching their expiry or action date, plus anything marked high priority.
-- **Later / inactive** keeps distant and disabled items available without letting them dominate the page.
+### Warning
 
-Cards use friendly wording such as **All good**, **Coming up**, **Ready to deal with**, **Urgent**, and **Expired**, alongside locale-aware dates and relative phrases. Items needing attention expose **Mark as renewed** and **Dismiss reminder** as quick actions. Dismissal quiets only the current stage; it does not change the expiry date or record a renewal.
+Warnings give you advance notice.
 
-The compact filter area supports search, category, friendly status, enabled state, task state, priority, and sorting. It also includes clear loading, error, filtered-empty, and first-run empty states. Summary counts and the next expiry always describe the complete collection, even while the cards are filtered.
+You can have several warning points, such as:
 
-The add/edit form is split into Basic details, When can you deal with it?, Reminders, Renewal, and Advanced sections. Reminder thresholds are managed as individual schedule rows with common presets or a custom whole number of days, while the calculated action date updates beside the controls. Items with no waiting period show **Any time** instead of exposing the backend's internal sentinel date. User-facing labels use **High priority** and **Create a Home Assistant sensor for this item**; lower-level identifiers remain tucked into Advanced.
+- 180 days
+- 90 days
+- 30 days
+- 7 days
+- 1 day
 
-**Mark as renewed** always opens a confirmation dialog showing the previous expiry and an editable new date. A configured renewal period provides a suggested date, but the date never advances silently. Confirming records the previous expiry and resets acknowledgement and notification state.
+A warning does **not** necessarily mean that action can already be taken.
 
-## Entities
+### Actionable
 
-- `sensor.next_expiry` — date and bounded metadata for the next enabled expiry
-- `sensor.next_actionable_expiry` — next unacknowledged actionable expiry
-- `sensor.expiry_tracker_actionable` — count requiring attention now
-- `sensor.expiry_tracker_urgent` — urgent count
-- `sensor.expiry_tracker_expired` — expired count
-- `calendar.expiry_tracker` — enabled expiry dates
+The actionable date answers:
 
-When **Create a Home Assistant sensor for this item** is enabled, the stable item UUID backs a date sensor whose bounded attributes include expiry, days remaining, status, actionable state/date, urgent date, acknowledgement, category, and importance.
+> **When can I actually start dealing with this?**
 
-## Actions
+You can configure this as:
 
-Mutations use stable `item_id` values:
+- Immediately
+- A number of days before expiry
+- A number of months before expiry
+- A specific date
 
-- `expiry_tracker.create_item`
-- `expiry_tracker.update_item`
-- `expiry_tracker.delete_item`
-- `expiry_tracker.renew_item`
-- `expiry_tracker.acknowledge_item`
-- `expiry_tracker.reset_acknowledgement`
+For example, if an insurance company only provides renewal quotes 30 days before expiry, you could make the policy actionable 30 days before its expiry date.
 
-Queries return structured response data for automations and conversation agents:
+### Urgent
 
-- `expiry_tracker.search_items`
-- `expiry_tracker.get_upcoming`
-- `expiry_tracker.get_actionable`
-- `expiry_tracker.get_urgent`
-- `expiry_tracker.get_expired`
-- `expiry_tracker.get_between`
+The urgent date is when an outstanding item should move to a higher level of priority.
 
-Example automation response query:
+Urgent takes precedence over actionable.
+
+---
+
+# The sidebar
+
+Expiry Tracker organises items by what you are likely to need next rather than presenting one large administration table.
+
+## Needs your attention
+
+Contains items which are actionable, urgent or expired and currently need attention.
+
+These items provide quick actions such as:
+
+- **Mark as renewed**
+- **Dismiss reminder**
+
+## Dismissed — still outstanding
+
+Dismissing a reminder does **not** mark the item as renewed.
+
+It simply tells Expiry Tracker that you do not want to be reminded about that particular stage again.
+
+The item remains visible here because the underlying expiry is still outstanding.
+
+If it later reaches another stage—for example, moving from **Ready to deal with** to **Urgent**—it can ask for your attention again.
+
+## Coming up
+
+Contains enabled items which are approaching their warning, actionable or expiry dates.
+
+High-priority items may also appear here.
+
+## Later / inactive
+
+Contains items which are further away, together with disabled items.
+
+This keeps them available without allowing distant dates to dominate the main view.
+
+---
+
+# Adding and editing items
+
+The item editor is divided into sections so that common settings appear first and more specialised options can be left alone unless needed.
+
+## Basic details
+
+Set the item's name, category, expiry date and other basic information.
+
+## When can you deal with it?
+
+This controls the **actionable date**.
+
+Use it when an item cannot or does not need to be dealt with immediately.
+
+For example:
+
+- Passport renewal opens 9 months before expiry
+- Insurance quotes become available 30 days before expiry
+- A professional registration portal opens on a particular date
+
+If there is no waiting period, you can simply allow the item to be dealt with **Any time**.
+
+## Reminders
+
+You can create one or more advance warning points.
+
+Common values are available as presets, or you can enter your own number of days.
+
+## Renewal
+
+If an item normally renews for a predictable period, you can configure that period so Expiry Tracker can suggest the next expiry date when you renew it.
+
+The date is **never changed automatically**.
+
+Selecting **Mark as renewed** opens a confirmation window showing:
+
+- The previous expiry date
+- The suggested new expiry date, if available
+
+You can change the suggested date before confirming it.
+
+## Advanced
+
+Less commonly needed options are kept here, including lower-level identifiers and optional per-item Home Assistant sensors.
+
+---
+
+# Example setups
+
+These are examples rather than rules. Actual renewal periods and requirements vary, so configure dates to suit the item you are tracking.
+
+## Passport
+
+Example:
+
+- **Category:** Identity/document
+- **Expiry:** Date printed on the passport
+- **Actionable:** 9 months before expiry
+- **Warnings:** 365, 270, 180, 90 and 30 days
+- **Urgent:** 90 days
+- **Renewal period:** Manual, or 10 years if that reliably matches the passport concerned
+
+Using an earlier actionable date can be useful where you want to preserve a travel-validity margin rather than waiting until the passport is close to expiry.
+
+## Car insurance
+
+Example:
+
+- **Category:** Insurance
+- **Expiry:** Current policy end date
+- **Actionable:** 30 days before expiry
+- **Warnings:** 60, 30, 14, 7 and 1 days
+- **Urgent:** 7 days
+- **Renewal period:** 12 months, if appropriate
+
+## GP or medical card
+
+Example:
+
+- **Category:** Medical
+- **Expiry:** Card expiry date
+- **Actionable:** The date renewal applications open, if known
+- **Warnings:** 90, 30 and 7 days
+- **Urgent:** 7 days
+
+## Professional registration
+
+Example:
+
+- **Category:** Professional
+- **Actionable:** Immediately, or from the date the renewal portal opens
+- **Warnings:** 180, 90, 30 and 7 days
+- **Urgent:** 30 days
+- **High priority:** Enabled if appropriate
+
+---
+
+# Dismissing and renewing
+
+These actions deliberately mean different things.
+
+### Dismiss reminder
+
+Use this when:
+
+> “I know about this. Stop reminding me about this stage for now.”
+
+The expiry date is unchanged and the item is **not** recorded as renewed.
+
+Dismissal applies only to the current stage.
+
+For example, dismissing the actionable reminder does not prevent the item from becoming urgent later.
+
+### Mark as renewed
+
+Use this when the item has actually been renewed or replaced.
+
+Expiry Tracker will:
+
+- Record the old expiry in the item's history
+- Ask you to confirm the new expiry date
+- Reset its reminder/dismissal state
+- Begin tracking the new expiry
+
+---
+
+# Notifications
+
+Expiry Tracker can optionally send notifications through a normal Home Assistant `notify` service.
+
+To configure built-in notifications:
+
+1. Go to **Settings → Devices & services**.
+2. Find **Expiry Tracker**.
+3. Open its configuration/options.
+4. Enter the notification service you want to use.
+
+For example:
+
+```text
+notify.mobile_app_my_phone
+```
+
+You can leave this blank if you prefer to create your own Home Assistant automations using Expiry Tracker's sensors and actions.
+
+Depending on the item settings, notifications can be sent for:
+
+- Warning points
+- First becoming actionable
+- Becoming urgent
+- Expiry
+
+Notifications can optionally repeat until that stage is dismissed.
+
+Expiry Tracker checks for notification changes hourly. It avoids repeatedly sending a one-off notification for the same transition.
+
+---
+
+# Optional Reminders integration
+
+Expiry Tracker can also work with the separate **Reminders** integration when it is installed.
+
+This is entirely optional. You do **not** need Reminders to use Expiry Tracker.
+
+When the integration is available:
+
+- Warning milestones are treated as informational reminders.
+- Actionable, urgent and expired items remain outstanding until dismissed or renewed.
+- A **Renewed** action can take you back to Expiry Tracker to confirm the new expiry date.
+
+Selecting **Renewed** from a Home Assistant notification does not silently change the expiry date. Expiry Tracker still asks you to confirm or edit the new date first.
+
+---
+
+# Home Assistant entities
+
+You do not need to use these entities to use Expiry Tracker. They are provided for dashboards, templates and automations.
+
+Expiry Tracker creates collection-level entities including:
+
+| Entity | Purpose |
+|---|---|
+| `sensor.next_expiry` | The next enabled item to expire |
+| `sensor.next_actionable_expiry` | The next outstanding item that can be acted on |
+| `sensor.expiry_tracker_actionable` | Number of items requiring attention |
+| `sensor.expiry_tracker_urgent` | Number of urgent items |
+| `sensor.expiry_tracker_expired` | Number of expired items |
+| `calendar.expiry_tracker` | Calendar containing enabled expiry dates |
+
+## Per-item sensors
+
+When **Create a Home Assistant sensor for this item** is enabled, Expiry Tracker also creates a date sensor for that particular item.
+
+Its attributes include information such as:
+
+- Expiry
+- Days remaining
+- Current status
+- Actionable date
+- Urgent date
+- Dismissal state
+- Category
+- Importance
+
+The item's internal ID remains the same if you rename it, so renaming an item does not make Expiry Tracker treat it as a completely new record.
+
+---
+
+# Using Expiry Tracker in automations
+
+This section is optional and intended for users who want to integrate Expiry Tracker more deeply with Home Assistant.
+
+Expiry Tracker provides actions for creating and changing items:
+
+```text
+expiry_tracker.create_item
+expiry_tracker.update_item
+expiry_tracker.delete_item
+expiry_tracker.renew_item
+expiry_tracker.acknowledge_item
+expiry_tracker.reset_acknowledgement
+```
+
+It also provides actions which return information:
+
+```text
+expiry_tracker.search_items
+expiry_tracker.get_upcoming
+expiry_tracker.get_actionable
+expiry_tracker.get_urgent
+expiry_tracker.get_expired
+expiry_tracker.get_between
+```
+
+For example, an automation or script can retrieve all currently actionable items:
 
 ```yaml
 action: expiry_tracker.get_actionable
@@ -111,28 +470,19 @@ data:
 response_variable: admin_due
 ```
 
-## Notifications and escalation
+The returned data can then be used later in the automation or script.
 
-In integration options, set a Home Assistant notification service such as `notify.mobile_app_phone`. An optional target may also be supplied. Leave the service blank to keep built-in dispatch disabled and drive notifications entirely from automations using the sensors/actions.
+Items are identified internally using a stable `item_id`. This means automations can continue referring to an item even if its displayed name changes.
 
-Per-item policy supports warning thresholds, first-actionable, urgent, and expiry notifications, stage-specific dismissal, repeat-until-dismissed, and a repeat interval. Each transition is deduplicated. The scheduler checks hourly; non-repeat events are recorded once, while repeat attention messages respect the configured interval and stop for the dismissed stage. Notification history is bounded with the rest of item history.
+---
 
-With the optional Reminders backend, warning milestones are informational and do not expose generic completion. Actionable, urgent, and expiry milestones require dismissal, disable generic **Done**, and offer a source-owned **Renewed** action. **Dismiss** only quiets the matching stage. **Renewed** emits `expiry_tracker_renewal_requested` and creates a Home Assistant notification linking to the Expiry Tracker panel, where the existing renewal dialog suggests a recurrence-derived date when configured and still requires confirmation/editing. Home Assistant notification actions cannot directly open an interactive date picker, so selecting **Renewed** does not modify the item until that dialog is confirmed.
+# Assist and LLM access
 
-An optional **In progress** workflow state is intentionally deferred. Adding it would introduce a separate state lifecycle and escalation policy beyond the focused stage-acknowledgement change; Expiry Tracker continues to distinguish only outstanding/dismissed from actually renewed.
+This is an advanced optional feature.
 
-## Assist / LLM access
+Where supported by Home Assistant's LLM/Assist system, Expiry Tracker can provide a read-only `query_expiry_items` tool.
 
-Expiry Tracker contributes a read-only `query_expiry_items` tool where supported by Home Assistant's contributed LLM APIs. It supports:
-
-- `actionable_only`, `urgent_only`, and `expired_only`
-- `due_within_days`
-- category and important-only filters
-- name/alias/category search
-
-The tool prompt explicitly tells the model to use `actionable_only` for “what do I need to deal with?” questions. Mutation is intentionally unavailable to LLMs.
-
-Examples include:
+This allows a compatible conversation agent to answer questions such as:
 
 - “When does my passport expire?”
 - “When can I renew my passport?”
@@ -141,48 +491,120 @@ Examples include:
 - “What expires in the next six months?”
 - “Is anything urgent?”
 
-## Example configurations
+Queries can be filtered by things such as:
 
-### Passport
+- Actionable items
+- Urgent items
+- Expired items
+- Items due within a number of days
+- Category
+- High-priority items
+- Name or alias
 
-- Category: Identity/document
-- Expiry: the printed passport expiry
-- Actionable: 9 months before expiry (to preserve travel-validity margin)
-- Warnings: 365, 270, 180, 90, 30 days
-- Urgent: 90 days
-- Recurrence: manual or 10 years only if that reliably matches your renewal
+The LLM access is intentionally **read-only**. A conversation agent cannot use this tool to create, delete or renew your items.
 
-### Car insurance
+---
 
-- Category: Insurance
-- Actionable: 30 days before expiry, when renewal quotes are obtainable
-- Warnings: 60, 30, 14, 7, 1 days
-- Urgent: 7 days
-- Recurrence: 12 months, if desired
+# Dates and month offsets
 
-### GP card
+When you configure an actionable or other date using calendar months, Expiry Tracker handles shorter months automatically.
 
-- Category: Medical
-- Actionable: use the date on which renewal applications open, if known
-- Warnings: 90, 30, 7 days
-- Urgent: 7 days
-- Acknowledgement: useful while supporting documents are being gathered
+For example:
 
-### Professional registration
+**1 month before 31 March → 28 February**
 
-- Category: Professional
-- Actionable: immediately or from the renewal portal opening date
-- Warnings: 180, 90, 30, 7 days
-- Urgent: 30 days
-- Important and require acknowledgement: enabled
+or 29 February in a leap year.
 
-## Storage, backup, and privacy
+This avoids invalid dates when moving between months of different lengths.
 
-Records are stored through Home Assistant's versioned `.storage` mechanism and are included in normal Home Assistant backups. Writes are serialized and atomic at collection level. Storage migrations preserve records and are tested. A corrupt envelope or malformed record fails setup instead of silently replacing the collection with an empty one.
+---
 
-History is limited to 50 entries per item. Entity attributes and query limits are bounded. Diagnostics contain only counts, category totals, version information, and collection-wide options—never names, aliases, dates, notes, or history. There is no telemetry or external network dependency.
+# Storage, backups and privacy
 
-## Development
+Expiry Tracker stores its information locally using Home Assistant's `.storage` system.
+
+Its data is therefore included in normal Home Assistant backups.
+
+Expiry Tracker does not require:
+
+- An online account
+- A separate cloud service
+- Telemetry
+- External network access
+
+Diagnostics deliberately exclude personal item details such as:
+
+- Names
+- Aliases
+- Expiry dates
+- Notes
+- History
+
+Diagnostics contain only general information such as counts, categories, integration version and collection-wide options.
+
+History is limited to 50 entries per item.
+
+Expiry Tracker also validates its stored data during setup rather than silently replacing damaged or malformed data with an empty collection.
+
+---
+
+# Troubleshooting
+
+## Expiry Tracker does not appear under Add integration
+
+Make sure:
+
+1. Expiry Tracker has been installed successfully through HACS or manually.
+2. Home Assistant has been restarted.
+3. The folder exists at:
+
+```text
+config/custom_components/expiry_tracker
+```
+
+If it was installed correctly but still does not appear in the integration search, refresh Home Assistant in your browser or clear the browser cache.
+
+## The sidebar page does not appear
+
+Try refreshing the Home Assistant frontend after installing and setting up the integration.
+
+If necessary, restart Home Assistant and reload the browser.
+
+## Notifications are not being sent
+
+Check that the configured notification service exists in Home Assistant and is entered in the same form you would use in an automation, for example:
+
+```text
+notify.mobile_app_my_phone
+```
+
+You can test the notification service separately from **Developer tools → Actions**.
+
+## I dismissed something but it is still shown
+
+This is intentional.
+
+**Dismiss reminder** means that the current reminder stage has been acknowledged. It does not mean that the item has been renewed.
+
+The item remains outstanding until you use **Mark as renewed** or otherwise change it.
+
+---
+
+# Bugs and feature requests
+
+If you find a problem or have an idea for Expiry Tracker, please open an issue on the GitHub repository:
+
+https://github.com/conorod1992/expiry_tracker/issues
+
+When reporting a bug, including the Home Assistant version, Expiry Tracker version and relevant logs or diagnostics can make the problem easier to investigate.
+
+Please avoid including sensitive personal information in screenshots or logs.
+
+---
+
+# Development
+
+The following section is intended for contributors rather than normal installation.
 
 ```bash
 python -m pip install -e '.[dev]'
@@ -192,4 +614,4 @@ ruff check .
 mypy custom_components/expiry_tracker
 ```
 
-The repository is also structured for hassfest and HACS validation.
+The repository is also structured for HACS and Home Assistant `hassfest` validation.
