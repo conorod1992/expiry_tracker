@@ -233,16 +233,8 @@ async def websocket_update_delivery(
     connection.send_result(
         msg["id"],
         {
-            "categories": list(BUILT_IN_CATEGORIES),
             "options": options,
-            "is_admin": True,
-            "capabilities": {
-                "llm_read": True,
-                "llm_mutation": False,
-                "reminders_available": reminders_available(hass),
-                "reminders_active": use_reminders,
-                "delivery_backend": "reminders" if use_reminders else "native",
-            },
+            "updated": True,
         },
     )
 

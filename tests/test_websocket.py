@@ -87,6 +87,7 @@ async def test_settings_and_delivery_update_use_existing_reminders_option(hass, 
     updated = await client.receive_json()
     assert updated["success"]
     assert updated["result"]["options"][CONF_USE_REMINDERS] is True
-    assert updated["result"]["capabilities"]["delivery_backend"] == "reminders"
+    assert updated["result"]["updated"] is True
+    assert "capabilities" not in updated["result"]
     entry = hass.config_entries.async_entries(DOMAIN)[0]
     assert entry.options == {CONF_USE_REMINDERS: True}
