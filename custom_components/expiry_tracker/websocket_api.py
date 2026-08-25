@@ -11,7 +11,7 @@ from homeassistant.components import websocket_api
 from homeassistant.components.websocket_api import ActiveConnection
 from homeassistant.core import HomeAssistant, callback
 
-from .const import BUILT_IN_CATEGORIES, MAX_LIST_LIMIT
+from .const import BUILT_IN_CATEGORIES, CONF_USE_REMINDERS, MAX_LIST_LIMIT
 from .helpers import decorate, get_entry, get_manager, local_today
 from .models import ItemNotFoundError, ItemValidationError
 from .reminders import reminders_available
@@ -206,7 +206,35 @@ def websocket_settings(
                 "llm_mutation": False,
                 "reminders_available": reminders_available(hass),
                 "reminders_active": bool(hass.data.get("expiry_tracker_reminders_active")),
+                "delivery_backend": (
+                    "reminders" if hass.data.get("expiry_tracker_reminders_active") else "native"
+                ),
             },
+        },
+    )
+
+
+@websocket_api.websocket_command(
+    {"type": "expiry_tracker/update_delivery", vol.Required(CONF_USE_REMINDERS): bool}
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def websocket_update_delivery(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Update the existing delivery option and let its update listener reload us."""
+    use_reminders = msg[CONF_USE_REMINDERS]
+    if use_reminders and not reminders_available(hass):
+        connection.send_error(msg["id"], "not_supported", "Reminders delivery is unavailable")
+        return
+    entry = get_entry(hass)
+    options = {**entry.options, CONF_USE_REMINDERS: use_reminders}
+    hass.config_entries.async_update_entry(entry, options=options)
+    connection.send_result(
+        msg["id"],
+        {
+            "options": options,
+            "updated": True,
         },
     )
 
@@ -221,5 +249,6 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_renew,
         websocket_acknowledge,
         websocket_settings,
+        websocket_update_delivery,
     ):
         websocket_api.async_register_command(hass, command)
