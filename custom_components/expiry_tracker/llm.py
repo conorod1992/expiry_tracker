@@ -145,9 +145,7 @@ class QueryExpiryItemsTool(llm.Tool):
         today = local_today()
         manager = get_manager(hass)
         candidates = (
-            manager.search(args["query"], limit=500)
-            if args["query"]
-            else manager.list_items()
+            manager.search(args["query"], limit=500) if args["query"] else manager.list_items()
         )
         if category := args.get("category"):
             candidates = [item for item in candidates if item.category == category]
@@ -165,11 +163,7 @@ class QueryExpiryItemsTool(llm.Tool):
             return {"view": view, "items": result, "count": len(result)}
 
         ids = {item.id for item in candidates}
-        end = (
-            today + timedelta(days=args["due_within_days"])
-            if "due_within_days" in args
-            else None
-        )
+        end = today + timedelta(days=args["due_within_days"]) if "due_within_days" in args else None
         rows = manager.query(
             today,
             end=end,
