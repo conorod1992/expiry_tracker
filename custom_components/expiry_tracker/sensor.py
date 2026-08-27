@@ -40,7 +40,11 @@ async def async_setup_entry(
         hass.async_create_task(_reconcile(), "expiry_tracker_reconcile_sensors")
 
     async def _reconcile() -> None:
-        desired = {item.id for item in manager.list_items() if item.enabled and item.expose_entity}
+        desired = {
+            item.id
+            for item in manager.list_items()
+            if item.enabled and not item.closed and item.expose_entity
+        }
         for item_id, entity in list(active.items()):
             if item_id not in desired:
                 active.pop(item_id)
@@ -82,7 +86,9 @@ class NextExpirySensor(SensorEntity):
         rows = [
             (item, calculate_state(item, today))
             for item in self._manager.list_items()
-            if item.enabled and (self._actionable or item.expiry_date >= today)
+            if item.enabled
+            and not item.closed
+            and (self._actionable or item.expiry_date >= today)
         ]
         if self._actionable:
             rows = [row for row in rows if row[1].requires_attention]
@@ -106,6 +112,7 @@ class NextExpirySensor(SensorEntity):
             "days_until_expiry": state.days_until_expiry,
             "status": state.status.value,
             "requires_attention": state.requires_attention,
+            "renewal_outstanding": state.renewal_outstanding,
         }
 
 
@@ -128,7 +135,9 @@ class StatusCountSensor(SensorEntity):
     def native_value(self) -> int:
         today = local_today()
         states = [
-            calculate_state(item, today) for item in self._manager.list_items() if item.enabled
+            calculate_state(item, today)
+            for item in self._manager.list_items()
+            if item.enabled and not item.closed
         ]
         if self._kind == "actionable":
             return sum(state.requires_attention for state in states)
@@ -178,6 +187,8 @@ class ExpiryItemSensor(SensorEntity):
             "acknowledged": state.acknowledged,
             "acknowledged_stage": item.acknowledged_stage,
             "acknowledged_at": item.acknowledged_at,
+            "requires_action": item.requires_action,
+            "renewal_outstanding": state.renewal_outstanding,
             "category": item.category,
             "important": item.important,
         }
