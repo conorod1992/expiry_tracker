@@ -34,9 +34,7 @@ def test_action_type_defaults_and_custom_validation():
     assert default.action_type == "renew"
     assert default.custom_action_label is None
 
-    custom = ExpiryItem.create(
-        item_data(action_type="custom", custom_action_label="serviced")
-    )
+    custom = ExpiryItem.create(item_data(action_type="custom", custom_action_label="serviced"))
     assert custom.action_type == "custom"
     assert custom.custom_action_label == "serviced"
 
