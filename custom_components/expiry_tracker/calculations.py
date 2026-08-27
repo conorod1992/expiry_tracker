@@ -121,7 +121,11 @@ def calculate_state(item: ExpiryItem, today: date) -> ExpiryState:
         )
     )
     requires_attention = bool(
-        item.enabled and not item.closed and item.requires_action and attention_stage and not acknowledged
+        item.enabled
+        and not item.closed
+        and item.requires_action
+        and attention_stage
+        and not acknowledged
     )
     renewal_outstanding = bool(
         item.enabled and not item.closed and item.requires_action and today > expiry
