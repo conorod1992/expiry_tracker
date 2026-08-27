@@ -2,18 +2,47 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime, timedelta
 
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.helpers.event import async_track_time_interval
 
-from .calculations import calculate_state
+from .calculations import ExpiryStatus, calculate_state
 from .const import CONF_NOTIFICATION_SERVICE, CONF_NOTIFICATION_TARGET
 from .helpers import get_manager, local_today
+from .models import ExpiryItem
+
+_LOGGER = logging.getLogger(__name__)
+
+
+def _notification_timestamp(value: str | None) -> datetime | None:
+    """Parse a stored notification timestamp without breaking the delivery loop."""
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
+
+
+def _current_event(item: ExpiryItem, status: ExpiryStatus, days: int) -> str | None:
+    """Return only the most relevant milestone for the item's current state."""
+    if status is ExpiryStatus.EXPIRED:
+        return "expiry" if item.notify_expiry else None
+    if status is ExpiryStatus.URGENT:
+        return "urgent" if item.notify_urgent else None
+    if status is ExpiryStatus.ACTIONABLE:
+        return "actionable" if item.notify_actionable else None
+    if status is ExpiryStatus.WARNING:
+        crossed = [threshold for threshold in item.warning_thresholds if 0 <= days <= threshold]
+        return f"warning_{min(crossed)}" if crossed else None
+    return None
 
 
 async def async_process_notifications(hass: HomeAssistant) -> None:
-    """Send each transition once; optionally repeat attention alerts at a bounded interval."""
+    """Send current transitions once and optionally repeat unacknowledged attention alerts."""
     entries = hass.config_entries.async_entries("expiry_tracker")
     if not entries:
         return
@@ -26,41 +55,50 @@ async def async_process_notifications(hass: HomeAssistant) -> None:
     now = datetime.now(UTC)
     today = local_today()
     manager = get_manager(hass)
+    target = entries[0].options.get(CONF_NOTIFICATION_TARGET, "").strip()
+
     for item in manager.list_items():
         if not item.enabled:
             continue
         state = calculate_state(item, today)
+        current_event = _current_event(item, state.status, state.days_until_expiry)
+        last_notifications = item.last_notifications or {}
         events: list[str] = []
-        days = state.days_until_expiry
-        for threshold in item.warning_thresholds:
-            if 0 <= days <= threshold:
-                events.append(f"warning_{threshold}")
-        if today >= state.actionable_date and item.notify_actionable:
-            events.append("actionable")
-        if today >= state.urgent_date and item.notify_urgent:
-            events.append("urgent")
-        if today >= item.expiry_date and item.notify_expiry:
-            events.append("expiry")
-        if item.repeat_until_acknowledged and state.requires_attention:
-            events.append("attention_repeat")
+
+        if current_event and current_event not in last_notifications:
+            events.append(current_event)
+        elif item.repeat_until_acknowledged and state.requires_attention:
+            previous_repeat = _notification_timestamp(last_notifications.get("attention_repeat"))
+            stage_key = state.attention_stage.value if state.attention_stage else None
+            previous_stage = _notification_timestamp(
+                last_notifications.get(stage_key) if stage_key else None
+            )
+            previous = previous_repeat or previous_stage
+            if previous is None or now - previous >= timedelta(hours=item.repeat_interval_hours):
+                events.append("attention_repeat")
+
         for event_key in events:
-            previous = (item.last_notifications or {}).get(event_key)
-            if previous:
-                previous_dt = datetime.fromisoformat(previous.replace("Z", "+00:00"))
-                interval = item.repeat_interval_hours if event_key == "attention_repeat" else 10**9
-                if now - previous_dt < timedelta(hours=interval):
-                    continue
-            target = entries[0].options.get(CONF_NOTIFICATION_TARGET, "").strip()
             data = {
                 "title": f"Expiry Tracker: {item.name}",
-                "message": f"{item.name} is {state.status.value}. Expiry: {item.expiry_date.isoformat()} ({days} days).",
+                "message": (
+                    f"{item.name} is {state.status.value}. "
+                    f"Expiry: {item.expiry_date.isoformat()} ({state.days_until_expiry} days)."
+                ),
             }
             if target:
                 data["target"] = target
-            await hass.services.async_call(domain, service, data, blocking=True)
-            await manager.async_record_notification(
-                item.id, event_key, now.isoformat().replace("+00:00", "Z")
-            )
+            try:
+                await hass.services.async_call(domain, service, data, blocking=True)
+                await manager.async_record_notification(
+                    item.id, event_key, now.isoformat().replace("+00:00", "Z")
+                )
+            except Exception:  # One bad target/item must not block all remaining notifications.
+                _LOGGER.warning(
+                    "Could not deliver Expiry Tracker notification %s for item %s",
+                    event_key,
+                    item.id,
+                    exc_info=True,
+                )
 
 
 def async_setup_notifications(hass: HomeAssistant, entry: object) -> CALLBACK_TYPE:
