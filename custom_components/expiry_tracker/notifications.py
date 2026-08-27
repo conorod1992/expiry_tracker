@@ -12,6 +12,7 @@ from .calculations import ExpiryStatus, calculate_state
 from .const import CONF_NOTIFICATION_SERVICE, CONF_NOTIFICATION_TARGET
 from .helpers import get_manager, local_today
 from .models import ExpiryItem
+from .reminders import reminders_available
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,6 +30,8 @@ def _notification_timestamp(value: str | None) -> datetime | None:
 
 def _current_event(item: ExpiryItem, status: ExpiryStatus, days: int) -> str | None:
     """Return only the most relevant milestone for the item's current state."""
+    if days == 0 and item.notify_expiry:
+        return "expiry"
     if status is ExpiryStatus.EXPIRED:
         return "expiry" if item.notify_expiry else None
     if status is ExpiryStatus.URGENT:
@@ -46,7 +49,7 @@ async def async_process_notifications(hass: HomeAssistant) -> None:
     entries = hass.config_entries.async_entries("expiry_tracker")
     if not entries:
         return
-    if hass.data.get("expiry_tracker_reminders_active"):
+    if hass.data.get("expiry_tracker_reminders_active") and reminders_available(hass):
         return
     configured = entries[0].options.get(CONF_NOTIFICATION_SERVICE, "").strip()
     if not configured or "." not in configured:
@@ -81,10 +84,16 @@ async def async_process_notifications(hass: HomeAssistant) -> None:
                 events.append("attention_repeat")
 
         for event_key in events:
+            if event_key == "expiry" and state.days_until_expiry == 0:
+                summary = f"{item.name} expires today."
+            elif event_key == "expiry":
+                summary = f"{item.name} is expired."
+            else:
+                summary = f"{item.name} is {state.status.value}."
             data = {
                 "title": f"Expiry Tracker: {item.name}",
                 "message": (
-                    f"{item.name} is {state.status.value}. "
+                    f"{summary} "
                     f"Expiry: {item.expiry_date.isoformat()} ({state.days_until_expiry} days)."
                 ),
             }
