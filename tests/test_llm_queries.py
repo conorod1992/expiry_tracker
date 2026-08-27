@@ -1,6 +1,6 @@
 from datetime import date
 
-from custom_components.expiry_tracker.llm import _view_items
+from custom_components.expiry_tracker.llm import _matches_search, _view_items
 from custom_components.expiry_tracker.models import ExpiryItem
 
 from .conftest import item_data
@@ -92,6 +92,20 @@ def test_recently_completed_uses_history_and_includes_completed_cancellation():
 
     assert [row["name"] for row in result] == ["Renewed", "Cancelled"]
     assert result[0]["last_completed_at"] == "2026-08-27T12:00:00Z"
+
+
+def test_historical_search_matching_includes_closed_items_and_aliases():
+    cancelled = _item(
+        "Driving licence",
+        "2026-08-30",
+        aliases=["licence renewal"],
+        closed=True,
+        closed_reason="Marked as cancelled",
+    )
+
+    assert _matches_search(cancelled, "driving")
+    assert _matches_search(cancelled, "renewal")
+    assert not _matches_search(cancelled, "passport")
 
 
 def test_expiring_this_year_includes_past_and_future_dates_but_not_closed_items():
