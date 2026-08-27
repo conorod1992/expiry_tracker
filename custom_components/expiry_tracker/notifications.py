@@ -73,7 +73,9 @@ async def async_process_notifications(hass: HomeAssistant) -> None:
             previous_stage = _notification_timestamp(
                 last_notifications.get(stage_key) if stage_key else None
             )
-            previous_times = [value for value in (previous_repeat, previous_stage) if value is not None]
+            previous_times = [
+                value for value in (previous_repeat, previous_stage) if value is not None
+            ]
             previous = max(previous_times) if previous_times else None
             if previous is None or now - previous >= timedelta(hours=item.repeat_interval_hours):
                 events.append("attention_repeat")
