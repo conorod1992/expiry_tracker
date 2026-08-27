@@ -4,7 +4,7 @@ from typing import Final
 
 DOMAIN: Final = "expiry_tracker"
 NAME: Final = "Expiry Tracker"
-VERSION: Final = "1.0.0"
+VERSION: Final = "1.4.0"
 PLATFORMS: Final = ["sensor", "calendar"]
 STORAGE_KEY: Final = "expiry_tracker.items"
 STORAGE_VERSION: Final = 2
