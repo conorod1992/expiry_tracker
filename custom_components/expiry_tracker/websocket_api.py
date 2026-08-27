@@ -145,9 +145,7 @@ async def _workflow(
                 decorate(await manager.async_close(msg["item_id"], msg.get("reason"))),
             )
         elif action == "reopen":
-            connection.send_result(
-                msg["id"], decorate(await manager.async_reopen(msg["item_id"]))
-            )
+            connection.send_result(msg["id"], decorate(await manager.async_reopen(msg["item_id"])))
         else:
             connection.send_result(
                 msg["id"],
