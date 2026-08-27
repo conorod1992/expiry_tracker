@@ -34,6 +34,7 @@ def _send_error(connection: ActiveConnection, msg_id: int, err: Exception) -> No
         vol.Optional("actionable_only", default=False): bool,
         vol.Optional("important_only", default=False): bool,
         vol.Optional("enabled"): bool,
+        vol.Optional("closed", default=False): bool,
         vol.Optional("sort", default="expiry"): vol.In(["expiry", "name", "status", "actionable"]),
         vol.Optional("direction", default="asc"): vol.In(["asc", "desc"]),
         vol.Optional("offset", default=0): vol.All(int, vol.Range(min=0)),
@@ -57,6 +58,7 @@ def websocket_list(hass: HomeAssistant, connection: ActiveConnection, msg: dict[
         and (not msg["actionable_only"] or row["requires_attention"])
         and (not msg["important_only"] or row["important"])
         and (msg.get("enabled") is None or row["enabled"] is msg["enabled"])
+        and row["closed"] is msg["closed"]
     ]
     rank = {"expired": 0, "urgent": 1, "actionable": 2, "warning": 3, "valid": 4}
     keys = {
@@ -137,6 +139,15 @@ async def _workflow(
             connection.send_result(
                 msg["id"], decorate(await manager.async_renew(msg["item_id"], value))
             )
+        elif action == "close":
+            connection.send_result(
+                msg["id"],
+                decorate(await manager.async_close(msg["item_id"], msg.get("reason"))),
+            )
+        elif action == "reopen":
+            connection.send_result(
+                msg["id"], decorate(await manager.async_reopen(msg["item_id"]))
+            )
         else:
             connection.send_result(
                 msg["id"],
@@ -172,6 +183,30 @@ async def websocket_renew(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
     await _workflow(hass, connection, msg, "renew")
+
+
+@websocket_api.websocket_command(
+    {
+        "type": "expiry_tracker/close",
+        vol.Required("item_id"): str,
+        vol.Optional("reason"): str,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def websocket_close(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    await _workflow(hass, connection, msg, "close")
+
+
+@websocket_api.websocket_command({"type": "expiry_tracker/reopen", vol.Required("item_id"): str})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def websocket_reopen(
+    hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
+) -> None:
+    await _workflow(hass, connection, msg, "reopen")
 
 
 @websocket_api.websocket_command(
@@ -247,6 +282,8 @@ def async_register_websocket_commands(hass: HomeAssistant) -> None:
         websocket_update,
         websocket_delete,
         websocket_renew,
+        websocket_close,
+        websocket_reopen,
         websocket_acknowledge,
         websocket_settings,
         websocket_update_delivery,
