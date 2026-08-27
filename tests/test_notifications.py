@@ -19,9 +19,13 @@ class ConfigEntries:
 
 
 class Services:
-    def __init__(self, *, fail_first=False):
+    def __init__(self, *, fail_first=False, reminders_available=False):
         self.calls = []
         self.fail_first = fail_first
+        self.reminders_available = reminders_available
+
+    def has_service(self, domain, service):
+        return domain == "reminders" and self.reminders_available
 
     async def async_call(self, domain, service, data, **kwargs):
         self.calls.append((domain, service, data, kwargs))
@@ -29,11 +33,14 @@ class Services:
             raise RuntimeError("notification target unavailable")
 
 
-def hass_for(manager, *, fail_first=False):
+def hass_for(manager, *, fail_first=False, reminders_active=False, reminders_available=False):
     return SimpleNamespace(
         config_entries=ConfigEntries({"notification_service": "notify.mobile_app"}),
-        data={},
-        services=Services(fail_first=fail_first),
+        data={"expiry_tracker_reminders_active": reminders_active},
+        services=Services(
+            fail_first=fail_first,
+            reminders_available=reminders_available,
+        ),
         manager=manager,
     )
 
@@ -45,6 +52,43 @@ async def test_already_urgent_item_sends_only_current_milestone(monkeypatch):
         item_data(expiry_date="2026-08-27", warning_thresholds=[180, 90, 30, 7, 1])
     )
     hass = hass_for(manager)
+    monkeypatch.setattr(
+        "custom_components.expiry_tracker.notifications.local_today", lambda: date(2026, 8, 24)
+    )
+    monkeypatch.setattr(
+        "custom_components.expiry_tracker.notifications.get_manager", lambda _hass: manager
+    )
+
+    await async_process_notifications(hass)
+
+    assert len(hass.services.calls) == 1
+    assert set(manager.get_item(item.id).last_notifications or {}) == {"urgent"}
+
+
+async def test_expiry_day_sends_expiry_milestone(monkeypatch):
+    manager = ExpiryTrackerManager(MemoryStorage(), lambda: None)
+    await manager.async_load()
+    item = await manager.async_create_item(item_data(expiry_date="2026-08-27"))
+    hass = hass_for(manager)
+    monkeypatch.setattr(
+        "custom_components.expiry_tracker.notifications.local_today", lambda: date(2026, 8, 27)
+    )
+    monkeypatch.setattr(
+        "custom_components.expiry_tracker.notifications.get_manager", lambda _hass: manager
+    )
+
+    await async_process_notifications(hass)
+
+    assert len(hass.services.calls) == 1
+    assert set(manager.get_item(item.id).last_notifications or {}) == {"expiry"}
+    assert "expires today" in hass.services.calls[0][2]["message"]
+
+
+async def test_native_delivery_falls_back_if_reminders_services_disappear(monkeypatch):
+    manager = ExpiryTrackerManager(MemoryStorage(), lambda: None)
+    await manager.async_load()
+    item = await manager.async_create_item(item_data(expiry_date="2026-08-27"))
+    hass = hass_for(manager, reminders_active=True, reminders_available=False)
     monkeypatch.setattr(
         "custom_components.expiry_tracker.notifications.local_today", lambda: date(2026, 8, 24)
     )
