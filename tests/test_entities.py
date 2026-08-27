@@ -33,6 +33,7 @@ async def test_aggregate_entities_are_bounded(manager, freezer):
         "days_until_expiry",
         "status",
         "requires_attention",
+        "renewal_outstanding",
     }
     assert StatusCountSensor(manager, "actionable").native_value == 1
 
