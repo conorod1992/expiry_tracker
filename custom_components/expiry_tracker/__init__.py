@@ -88,7 +88,7 @@ async def _setup_frontend(hass: HomeAssistant, entry: ExpiryTrackerConfigEntry) 
             webcomponent_name=PANEL_ELEMENT,
             sidebar_title="Expiry Tracker",
             sidebar_icon="mdi:calendar-alert",
-            module_url=f"{PANEL_STATIC_URL}/expiry-tracker-panel-enhanced.js?v={VERSION}",
+            module_url=f"{PANEL_STATIC_URL}/expiry-tracker-dashboard.js?v={VERSION}",
             require_admin=False,
             config_panel_domain=DOMAIN,
         )
