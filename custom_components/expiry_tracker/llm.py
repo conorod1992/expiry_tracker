@@ -26,6 +26,13 @@ _QUERY_VIEWS = (
 )
 
 
+def _matches_search(item: ExpiryItem, query: str) -> bool:
+    """Match the same user-facing fields as normal item search, including archived items."""
+    terms = query.casefold().split()
+    haystack = " ".join([item.name, item.category, *item.aliases]).casefold()
+    return all(term in haystack for term in terms)
+
+
 def _completion_at(item: ExpiryItem) -> datetime | None:
     """Return the most recent recorded real-world completion timestamp."""
     latest: datetime | None = None
@@ -144,15 +151,21 @@ class QueryExpiryItemsTool(llm.Tool):
         args = tool_input.tool_args
         today = local_today()
         manager = get_manager(hass)
-        candidates = (
-            manager.search(args["query"], limit=500) if args["query"] else manager.list_items()
-        )
+        view = args["view"]
+        if args["query"]:
+            if view == "recently_completed":
+                candidates = [
+                    item for item in manager.list_items() if _matches_search(item, args["query"])
+                ]
+            else:
+                candidates = manager.search(args["query"], limit=500)
+        else:
+            candidates = manager.list_items()
         if category := args.get("category"):
             candidates = [item for item in candidates if item.category == category]
         if args["important_only"]:
             candidates = [item for item in candidates if item.important]
 
-        view = args["view"]
         if view != "all":
             result = _view_items(
                 candidates,
