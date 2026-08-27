@@ -63,12 +63,12 @@ def _view_items(
         return [decorate(item, today) for item in selected]
 
     if view == "next_actionable":
-        eligible: list[tuple[tuple[object, ...], ExpiryItem]] = []
+        eligible: list[tuple[tuple[int, date, date, str, str], ExpiryItem]] = []
         for item in active:
             if not item.requires_action:
                 continue
             state = calculate_state(item, today)
-            key: tuple[object, ...] = (
+            key = (
                 0 if state.actionable else 1,
                 item.expiry_date if state.actionable else state.actionable_date,
                 item.expiry_date,
