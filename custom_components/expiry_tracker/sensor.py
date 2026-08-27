@@ -86,9 +86,7 @@ class NextExpirySensor(SensorEntity):
         rows = [
             (item, calculate_state(item, today))
             for item in self._manager.list_items()
-            if item.enabled
-            and not item.closed
-            and (self._actionable or item.expiry_date >= today)
+            if item.enabled and not item.closed and (self._actionable or item.expiry_date >= today)
         ]
         if self._actionable:
             rows = [row for row in rows if row[1].requires_attention]
