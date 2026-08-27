@@ -76,7 +76,7 @@ if (Panel && !Panel.prototype.__expiryDashboardEnhanced) {
   Panel.prototype.archiveView = function archiveView() {
     const rows = this.closedItems || [];
     if (!rows.length) return "";
-    return `<details class="archive-section"><summary><strong>Closed / archive</strong> <span class="count">${rows.length}</span></summary><p class="help">Closed items keep their history but no longer take part in reminders, sensors, calendar or active expiry views.</p><div class="archive-list">${rows.map((item)=>`<div class="archive-row"><div><strong>${this.esc(item.name)}</strong><br><small>Expired ${formatDate(item.expiry_date,this.locale,true)}${item.closed_reason?` · ${this.esc(item.closed_reason)}`:""}</small></div>${this.settings.is_admin?`<button class="button secondary small" data-reopen-id="${item.id}"><ha-icon icon="mdi:archive-arrow-up-outline"></ha-icon>Reopen</button>`:""}</div>`).join("")}</div></details>`;
+    return `<details class="archive-section"><summary><strong>Closed / archive</strong> <span class="count">${rows.length}</span></summary><p class="help">Closed items keep their history but no longer take part in reminders, sensors, calendar or active expiry views.</p><div class="archive-list">${rows.map((item)=>`<div class="archive-row"><div><strong>${this.esc(item.name)}</strong><br><small>Expiry date: ${formatDate(item.expiry_date,this.locale,true)}${item.closed_reason?` · ${this.esc(item.closed_reason)}`:""}</small></div>${this.settings.is_admin?`<button class="button secondary small" data-reopen-id="${item.id}"><ha-icon icon="mdi:archive-arrow-up-outline"></ha-icon>Reopen</button>`:""}</div>`).join("")}</div></details>`;
   };
 
   Panel.prototype.listView = function listView() {
