@@ -22,7 +22,7 @@ jobs:
       - run: ruff format --check .
       - run: ruff check .
       - run: mypy custom_components/expiry_tracker
-      - run: node --check custom_components/expiry_tracker/frontend/expiry-tracker-panel.js
+      - run: find custom_components/expiry_tracker/frontend -name '*.js' -print0 | xargs -0 -n1 node --check
       - run: node --test tests/*.test.mjs
 
   hassfest:
