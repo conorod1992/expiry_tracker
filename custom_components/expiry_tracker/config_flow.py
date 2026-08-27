@@ -52,9 +52,13 @@ class ExpiryTrackerOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+        reminders_supported = reminders_available(self.hass)
         options = self.config_entry.options
+        if user_input is not None:
+            data = dict(user_input)
+            if not reminders_supported and CONF_USE_REMINDERS in options:
+                data[CONF_USE_REMINDERS] = options[CONF_USE_REMINDERS]
+            return self.async_create_entry(title="", data=data)
         schema: dict[Any, Any] = {
             vol.Required(
                 CONF_SHOW_PANEL, default=options.get(CONF_SHOW_PANEL, DEFAULT_SHOW_PANEL)
@@ -78,7 +82,7 @@ class ExpiryTrackerOptionsFlow(config_entries.OptionsFlow):
                 CONF_NOTIFICATION_TARGET, default=options.get(CONF_NOTIFICATION_TARGET, "")
             ): str,
         }
-        if reminders_available(self.hass):
+        if reminders_supported:
             schema[
                 vol.Optional(
                     CONF_USE_REMINDERS,

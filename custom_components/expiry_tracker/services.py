@@ -112,7 +112,7 @@ async def async_register_services(hass: HomeAssistant) -> None:
                     )
                 )
             }
-        except ItemNotFoundError as err:
+        except (ItemNotFoundError, ValueError) as err:
             _error(err)
 
     async def search(call: ServiceCall) -> dict[str, Any]:
