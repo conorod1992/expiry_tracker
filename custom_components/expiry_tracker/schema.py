@@ -12,6 +12,7 @@ CREATE_FIELDS = {
     vol.Optional("enabled", default=True): cv.boolean,
     vol.Optional("important", default=False): cv.boolean,
     vol.Optional("expose_entity", default=False): cv.boolean,
+    vol.Optional("requires_action", default=True): cv.boolean,
     vol.Optional("actionable_mode", default="offset"): vol.In(["immediate", "offset", "date"]),
     vol.Optional("actionable_offset_value", default=30): vol.All(
         vol.Coerce(int), vol.Range(min=0, max=36500)
