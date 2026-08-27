@@ -58,7 +58,7 @@ async def async_process_notifications(hass: HomeAssistant) -> None:
     target = entries[0].options.get(CONF_NOTIFICATION_TARGET, "").strip()
 
     for item in manager.list_items():
-        if not item.enabled:
+        if not item.enabled or item.closed:
             continue
         state = calculate_state(item, today)
         current_event = _current_event(item, state.status, state.days_until_expiry)

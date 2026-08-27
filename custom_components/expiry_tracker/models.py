@@ -96,6 +96,7 @@ class ExpiryItem:
     enabled: bool = True
     important: bool = False
     expose_entity: bool = False
+    requires_action: bool = True
     actionable_mode: str = "offset"
     actionable_offset_value: int = 30
     actionable_offset_unit: str = "days"
@@ -112,6 +113,9 @@ class ExpiryItem:
     acknowledged_stage: str | None = None
     acknowledged_at: str | None = None
     recurrence_months: int | None = None
+    closed: bool = False
+    closed_at: str | None = None
+    closed_reason: str | None = None
     last_notifications: dict[str, str] | None = None
     history: tuple[dict[str, Any], ...] = ()
     created_at: str = ""
@@ -155,12 +159,14 @@ class ExpiryItem:
             ("enabled", True),
             ("important", False),
             ("expose_entity", False),
+            ("requires_action", True),
             ("notify_actionable", True),
             ("notify_urgent", True),
             ("notify_expiry", True),
             ("require_acknowledgement", False),
             ("repeat_until_acknowledged", False),
             ("acknowledged", False),
+            ("closed", False),
         ):
             value = data.get(field, default)
             if not isinstance(value, bool):
@@ -181,6 +187,13 @@ class ExpiryItem:
             raise ItemValidationError("last_notifications must be a string map")
         created = str(data.get("created_at") or utc_now_iso())
         updated = str(data.get("updated_at") or created)
+        closed_at = _text(data.get("closed_at"), "closed_at")
+        closed_reason = _text(data.get("closed_reason"), "closed_reason")
+        if bools["closed"] and closed_at is None:
+            closed_at = updated
+        if not bools["closed"]:
+            closed_at = None
+            closed_reason = None
         return cls(
             id=item_id,
             name=name,
@@ -207,6 +220,8 @@ class ExpiryItem:
             acknowledged_at=_text(data.get("acknowledged_at"), "acknowledged_at"),
             acknowledged_stage=acknowledged_stage,
             recurrence_months=recurrence,
+            closed_at=closed_at,
+            closed_reason=closed_reason,
             last_notifications=dict(last),
             history=_history(data.get("history")),
             created_at=created,
@@ -234,6 +249,9 @@ class ExpiryItem:
             "acknowledged",
             "acknowledged_stage",
             "acknowledged_at",
+            "closed",
+            "closed_at",
+            "closed_reason",
         } & changes.keys()
         if forbidden:
             raise ItemValidationError(

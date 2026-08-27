@@ -132,6 +132,8 @@ class ExpiryTrackerManager:
         terms = query.casefold().split()
         scored: list[tuple[int, str, ExpiryItem]] = []
         for item in self._items.values():
+            if item.closed:
+                continue
             fields = [item.name, item.category, *item.aliases]
             haystack = " ".join(fields).casefold()
             if not all(term in haystack for term in terms):
@@ -160,13 +162,15 @@ class ExpiryTrackerManager:
         important_only: bool = False,
         category: str | None = None,
         enabled_only: bool = True,
+        include_closed: bool = False,
         limit: int = 500,
     ) -> list[tuple[ExpiryItem, ExpiryState]]:
         rows: list[tuple[ExpiryItem, ExpiryState]] = []
         for item in self._items.values():
             state = calculate_state(item, today)
             if (
-                (enabled_only and not item.enabled)
+                (not include_closed and item.closed)
+                or (enabled_only and not item.enabled)
                 or (category and item.category != category)
                 or (important_only and not item.important)
             ):
@@ -202,6 +206,8 @@ class ExpiryTrackerManager:
     ) -> ExpiryItem:
         async with self._lock:
             old = self.get_item(item_id)
+            if old.closed:
+                raise ValueError("closed items cannot be acknowledged")
             selected_stage = AttentionStage(stage) if stage is not None else None
             if acknowledged and selected_stage is None:
                 selected_stage = calculate_state(old, self._local_date(None)).attention_stage
@@ -234,12 +240,17 @@ class ExpiryTrackerManager:
     async def async_renew(self, item_id: str, new_expiry_date: date | None = None) -> ExpiryItem:
         async with self._lock:
             old = self.get_item(item_id)
+            if old.closed:
+                raise ValueError("closed items must be reopened before they can be renewed")
             if new_expiry_date is None:
                 if old.recurrence_months is None:
                     raise ValueError(
                         "new_expiry_date is required when recurrence is not configured"
                     )
                 new_expiry_date = add_months(old.expiry_date, old.recurrence_months)
+                today = self._local_date(None)
+                while new_expiry_date <= today:
+                    new_expiry_date = add_months(new_expiry_date, old.recurrence_months)
             if new_expiry_date <= old.expiry_date:
                 raise ValueError("new expiry date must be after the previous expiry date")
             now = utc_now_iso()
@@ -266,6 +277,56 @@ class ExpiryTrackerManager:
         await self._changed("renew", item)
         return item
 
+    async def async_close(self, item_id: str, reason: str | None = None) -> ExpiryItem:
+        async with self._lock:
+            old = self.get_item(item_id)
+            if old.closed:
+                return old
+            now = utc_now_iso()
+            clean_reason = " ".join(reason.split()) if reason else None
+            if clean_reason and len(clean_reason) > 4000:
+                raise ValueError("close reason is too long")
+            event = {"type": "closed", "at": now, "reason": clean_reason}
+            item = await self._replace_workflow(
+                old,
+                {
+                    **old.to_dict(),
+                    "closed": True,
+                    "closed_at": now,
+                    "closed_reason": clean_reason,
+                    "acknowledged": False,
+                    "acknowledged_stage": None,
+                    "acknowledged_at": None,
+                    "last_notifications": {},
+                    "history": [*old.history, event][-MAX_HISTORY:],
+                    "updated_at": now,
+                },
+            )
+        await self._changed("close", item)
+        return item
+
+    async def async_reopen(self, item_id: str) -> ExpiryItem:
+        async with self._lock:
+            old = self.get_item(item_id)
+            if not old.closed:
+                return old
+            now = utc_now_iso()
+            event = {"type": "reopened", "at": now}
+            item = await self._replace_workflow(
+                old,
+                {
+                    **old.to_dict(),
+                    "closed": False,
+                    "closed_at": None,
+                    "closed_reason": None,
+                    "last_notifications": {},
+                    "history": [*old.history, event][-MAX_HISTORY:],
+                    "updated_at": now,
+                },
+            )
+        await self._changed("reopen", item)
+        return item
+
     async def async_record_notification(self, item_id: str, event_key: str, timestamp: str) -> None:
         async with self._lock:
             old = self.get_item(item_id)
@@ -284,6 +345,8 @@ class ExpiryTrackerManager:
             "item_count": len(items),
             "enabled_count": sum(i.enabled for i in items),
             "important_count": sum(i.important for i in items),
+            "closed_count": sum(i.closed for i in items),
+            "passive_count": sum(not i.requires_action for i in items),
             "exposed_entity_count": sum(i.expose_entity for i in items),
             "category_counts": dict(Counter(i.category for i in items)),
         }

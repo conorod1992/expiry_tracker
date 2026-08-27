@@ -55,7 +55,7 @@ class ExpiryTrackerCalendar(CalendarEntity):
         rows = [
             item
             for item in self._manager.list_items()
-            if item.enabled and item.expiry_date >= local_today()
+            if item.enabled and not item.closed and item.expiry_date >= local_today()
         ]
         return self._event(min(rows, key=lambda item: item.expiry_date)) if rows else None
 
@@ -66,5 +66,5 @@ class ExpiryTrackerCalendar(CalendarEntity):
         return [
             self._event(item)
             for item in self._manager.list_items()
-            if item.enabled and start <= item.expiry_date < end
+            if item.enabled and not item.closed and start <= item.expiry_date < end
         ]

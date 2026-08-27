@@ -20,6 +20,8 @@ MUTATIONS = (
     "update_item",
     "delete_item",
     "renew_item",
+    "close_item",
+    "reopen_item",
     "acknowledge_item",
     "reset_acknowledgement",
 )
@@ -103,6 +105,24 @@ async def async_register_services(hass: HomeAssistant) -> None:
         except (ItemNotFoundError, ValueError) as err:
             _error(err)
 
+    async def close(call: ServiceCall) -> dict[str, Any]:
+        try:
+            return {
+                "item": decorate(
+                    await get_manager(hass).async_close(
+                        call.data["item_id"], call.data.get("reason")
+                    )
+                )
+            }
+        except (ItemNotFoundError, ValueError) as err:
+            _error(err)
+
+    async def reopen(call: ServiceCall) -> dict[str, Any]:
+        try:
+            return {"item": decorate(await get_manager(hass).async_reopen(call.data["item_id"]))}
+        except ItemNotFoundError as err:
+            _error(err)
+
     async def acknowledge(call: ServiceCall) -> dict[str, Any]:
         try:
             return {
@@ -148,6 +168,20 @@ async def async_register_services(hass: HomeAssistant) -> None:
         schema=vol.Schema(
             {vol.Required("item_id"): cv.string, vol.Optional("new_expiry_date"): cv.string}
         ),
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "close_item",
+        close,
+        schema=vol.Schema({vol.Required("item_id"): cv.string, vol.Optional("reason"): cv.string}),
+        supports_response=SupportsResponse.OPTIONAL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "reopen_item",
+        reopen,
+        schema=vol.Schema({vol.Required("item_id"): cv.string}),
         supports_response=SupportsResponse.OPTIONAL,
     )
     ack_schema = vol.Schema(

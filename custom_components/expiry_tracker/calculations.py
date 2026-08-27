@@ -61,6 +61,7 @@ class ExpiryState:
     attention_stage: AttentionStage | None
     acknowledged: bool
     requires_attention: bool
+    renewal_outstanding: bool
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -73,6 +74,7 @@ class ExpiryState:
             "attention_stage": self.attention_stage.value if self.attention_stage else None,
             "acknowledged": self.acknowledged,
             "requires_attention": self.requires_attention,
+            "renewal_outstanding": self.renewal_outstanding,
         }
 
 
@@ -93,26 +95,24 @@ def calculate_state(item: ExpiryItem, today: date) -> ExpiryState:
     urgent_date = expiry - timedelta(days=item.urgent_days_before)
     if today > expiry:
         status = ExpiryStatus.EXPIRED
-    elif today >= urgent_date:
+    elif item.requires_action and today >= urgent_date:
         status = ExpiryStatus.URGENT
-    elif today >= actionable_date:
+    elif item.requires_action and today >= actionable_date:
         status = ExpiryStatus.ACTIONABLE
     elif warning_date is not None and today >= warning_date:
         status = ExpiryStatus.WARNING
     else:
         status = ExpiryStatus.VALID
-    actionable = today >= actionable_date
+    actionable = bool(item.requires_action and today >= actionable_date)
     attention_stage = (
         AttentionStage.EXPIRY
-        if today >= expiry
+        if item.requires_action and today >= expiry
         else AttentionStage.URGENT
-        if today >= urgent_date
+        if item.requires_action and today >= urgent_date
         else AttentionStage.ACTIONABLE
         if actionable
         else None
     )
-    # The boolean-only form is accepted for legacy/directly-created objects. Stored
-    # records are upgraded by the manager to an explicit stage during load.
     acknowledged = bool(
         attention_stage
         and (
@@ -120,7 +120,16 @@ def calculate_state(item: ExpiryItem, today: date) -> ExpiryState:
             or (item.acknowledged and item.acknowledged_stage is None)
         )
     )
-    requires_attention = bool(item.enabled and attention_stage and not acknowledged)
+    requires_attention = bool(
+        item.enabled
+        and not item.closed
+        and item.requires_action
+        and attention_stage
+        and not acknowledged
+    )
+    renewal_outstanding = bool(
+        item.enabled and not item.closed and item.requires_action and today > expiry
+    )
     return ExpiryState(
         status=status,
         days_until_expiry=(expiry - today).days,
@@ -131,4 +140,5 @@ def calculate_state(item: ExpiryItem, today: date) -> ExpiryState:
         attention_stage=attention_stage,
         acknowledged=acknowledged,
         requires_attention=requires_attention,
+        renewal_outstanding=renewal_outstanding,
     )

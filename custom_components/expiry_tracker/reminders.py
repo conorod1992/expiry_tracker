@@ -38,7 +38,7 @@ class ReminderBackend:
         self.manager = manager
 
     def _milestones(self, item: ExpiryItem) -> dict[str, dict[str, Any]]:
-        if not item.enabled:
+        if not item.enabled or item.closed:
             return {}
         today = local_today()
         state = calculate_state(item, today)
@@ -47,20 +47,24 @@ class ReminderBackend:
                 f"warning_{days}": item.expiry_date - timedelta(days=days)
                 for days in item.warning_thresholds
             },
-            "actionable": state.actionable_date,
-            "urgent": state.urgent_date,
             "expiry": item.expiry_date,
         }
+        if item.requires_action:
+            dates["actionable"] = state.actionable_date
+            dates["urgent"] = state.urgent_date
         current = state.attention_stage.value if state.attention_stage else None
         result: dict[str, dict[str, Any]] = {}
         for event, due_date in dates.items():
             warning = event.startswith("warning_")
+            passive_expiry = event == "expiry" and not item.requires_action
             if warning and (due_date < today or (due_date == today and current is not None)):
                 continue
-            if not warning and due_date <= today and event != current:
+            if not warning and not passive_expiry and due_date <= today and event != current:
+                continue
+            if passive_expiry and due_date < today:
                 continue
             scheduled_date = today if event == current and due_date < today else due_date
-            if warning:
+            if warning or passive_expiry:
                 acknowledgement_policy: str = "not_required"
                 escalation: dict[str, int] | None = None
                 external_actions: list[dict[str, str]] = []
@@ -203,6 +207,8 @@ class ReminderBackend:
             item = self.manager.get_item(item_id)
         except ItemNotFoundError:
             return
+        if item.closed or not item.requires_action:
+            return
         if data.get("external_action_id") == "renewed":
             await self._request_renewal(item)
         elif data.get("action") in {"dismissed", "acknowledged"}:
@@ -210,11 +216,13 @@ class ReminderBackend:
 
     async def _request_renewal(self, item: ExpiryItem) -> None:
         """Guide the user to confirmation; an external action never renews silently."""
-        suggested = (
-            add_months(item.expiry_date, item.recurrence_months).isoformat()
-            if item.recurrence_months
-            else None
-        )
+        suggested = None
+        if item.recurrence_months:
+            suggested_date = add_months(item.expiry_date, item.recurrence_months)
+            today = local_today()
+            while suggested_date <= today:
+                suggested_date = add_months(suggested_date, item.recurrence_months)
+            suggested = suggested_date.isoformat()
         self.hass.bus.async_fire(
             RENEWAL_REQUESTED_EVENT,
             {"item_id": item.id, "suggested_expiry_date": suggested},
