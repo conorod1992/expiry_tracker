@@ -56,11 +56,11 @@ def _view_items(
     active = [item for item in items if item.enabled and not item.closed]
 
     if view == "next_expiry":
-        selected = sorted(
+        next_expiry_items = sorted(
             (item for item in active if item.expiry_date >= today),
             key=lambda item: (item.expiry_date, item.name.casefold(), item.id),
         )
-        return [decorate(item, today) for item in selected]
+        return [decorate(item, today) for item in next_expiry_items]
 
     if view == "next_actionable":
         eligible: list[tuple[tuple[int, date, date, str, str], ExpiryItem]] = []
@@ -94,20 +94,20 @@ def _view_items(
         return result
 
     if view == "expiring_this_year":
-        selected = sorted(
+        expiring_this_year_items = sorted(
             (item for item in active if item.expiry_date.year == today.year),
             key=lambda item: (item.expiry_date, item.name.casefold(), item.id),
         )
-        return [decorate(item, today) for item in selected]
+        return [decorate(item, today) for item in expiring_this_year_items]
 
     if view == "dismissed_outstanding":
-        selected: list[tuple[date, ExpiryItem]] = []
+        dismissed_items: list[tuple[date, ExpiryItem]] = []
         for item in active:
             state = calculate_state(item, today)
             if item.requires_action and state.actionable and state.acknowledged:
-                selected.append((item.expiry_date, item))
-        selected.sort(key=lambda row: (row[0], row[1].name.casefold(), row[1].id))
-        return [decorate(item, today) for _, item in selected]
+                dismissed_items.append((item.expiry_date, item))
+        dismissed_items.sort(key=lambda row: (row[0], row[1].name.casefold(), row[1].id))
+        return [decorate(item, today) for _, item in dismissed_items]
 
     return [decorate(item, today) for item in active]
 
