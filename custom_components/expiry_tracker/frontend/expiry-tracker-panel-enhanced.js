@@ -63,7 +63,7 @@ if (Panel && !Panel.prototype.__expiryWorkflowEnhanced) {
       const marker = '</div></div><div class="item-side">';
       html = html.replace(
         marker,
-        `<div class="item-meta"><ha-icon icon="mdi:tag-outline"></ha-icon>Matched alias: ${this.esc(alias)}</div></div></div><div class="item-side">`,
+        `</div><div class="item-meta"><ha-icon icon="mdi:tag-outline"></ha-icon>Matched alias: ${this.esc(alias)}</div></div><div class="item-side">`,
       );
     }
     return html;
@@ -129,9 +129,11 @@ if (Panel && !Panel.prototype.__expiryWorkflowEnhanced) {
     return originalModalView
       .call(this)
       .replaceAll("Mark as renewed", this.esc(info.button))
-      .replace("real-world renewal or replacement", `real-world ${this.esc(info.label.toLowerCase())} action`)
-      .replace("expiry date of the renewed item", "next expiry date after completing the task")
-      .replace("usual", "usual");
+      .replace(
+        "real-world renewal or replacement",
+        `real-world ${this.esc(info.label.toLowerCase())} action`,
+      )
+      .replace("expiry date of the renewed item", "next expiry date after completing the task");
   };
 
   Panel.prototype.submitRenewal = async function submitRenewal(event) {
