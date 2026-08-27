@@ -22,7 +22,25 @@ from .models import ExpiryItem, ItemNotFoundError
 
 _LOGGER = logging.getLogger(__name__)
 _SERVICES = ("create", "list", "update", "delete", "external_action")
-_RENEWED_ACTION = {"id": "renewed", "label": "Renewed"}
+_COMPLETED_LABELS = {
+    "renew": "Renewed",
+    "replace": "Replaced",
+    "review": "Reviewed",
+    "retest": "Re-tested",
+    "reregister": "Re-registered",
+    "cancel": "Cancelled",
+    "check": "Checked",
+}
+
+
+def _completion_label(item: ExpiryItem) -> str:
+    if item.action_type == "custom":
+        return item.custom_action_label or "Completed"
+    return _COMPLETED_LABELS.get(item.action_type, "Renewed")
+
+
+def _completion_action(item: ExpiryItem) -> dict[str, str]:
+    return {"id": "renewed", "label": _completion_label(item)}
 
 
 def reminders_available(hass: HomeAssistant) -> bool:
@@ -75,15 +93,15 @@ class ReminderBackend:
                     "repeat_minutes": 720,
                     "max_attempts": 2,
                 }
-                external_actions = [_RENEWED_ACTION]
+                external_actions = [_completion_action(item)]
             elif event == "urgent":
                 acknowledgement_policy = "required"
                 escalation = {"initial_delay_minutes": 60, "repeat_minutes": 240, "max_attempts": 3}
-                external_actions = [_RENEWED_ACTION]
+                external_actions = [_completion_action(item)]
             else:
                 acknowledgement_policy = "required"
                 escalation = {"initial_delay_minutes": 30, "repeat_minutes": 120, "max_attempts": 5}
-                external_actions = [_RENEWED_ACTION]
+                external_actions = [_completion_action(item)]
             result[event] = {
                 "title": f"Expiry Tracker: {item.name}",
                 "message": f"{item.name}: {event.replace('_', ' ')}. Expires {item.expiry_date.isoformat()}.",
@@ -210,12 +228,15 @@ class ReminderBackend:
         if item.closed or not item.requires_action:
             return
         if data.get("external_action_id") == "renewed":
-            await self._request_renewal(item)
+            if item.action_type == "cancel":
+                await self.manager.async_close(item.id, "Marked as cancelled")
+            else:
+                await self._request_renewal(item)
         elif data.get("action") in {"dismissed", "acknowledged"}:
             await self.manager.async_acknowledge(item_id, stage=source_event)
 
     async def _request_renewal(self, item: ExpiryItem) -> None:
-        """Guide the user to confirmation; an external action never renews silently."""
+        """Guide the user to confirmation; an external action never changes the date silently."""
         suggested = None
         if item.recurrence_months:
             suggested_date = add_months(item.expiry_date, item.recurrence_months)
@@ -227,14 +248,15 @@ class ReminderBackend:
             RENEWAL_REQUESTED_EVENT,
             {"item_id": item.id, "suggested_expiry_date": suggested},
         )
+        completion = _completion_label(item)
         await self.hass.services.async_call(
             "persistent_notification",
             "create",
             {
                 "notification_id": f"expiry_tracker_renewal_{item.id}",
-                "title": f"Confirm renewal: {item.name}",
+                "title": f"Confirm {completion.lower()}: {item.name}",
                 "message": (
-                    "Renewed was selected, but the expiry has not changed. "
+                    f"{completion} was selected, but the expiry has not changed. "
                     f"[Open Expiry Tracker to confirm the new date](/expiry-tracker?renew={item.id})."
                 ),
             },
