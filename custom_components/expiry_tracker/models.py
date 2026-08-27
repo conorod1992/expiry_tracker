@@ -10,6 +10,17 @@ from uuid import UUID, uuid4
 
 from .const import MAX_HISTORY
 
+ACTION_TYPES = {
+    "renew",
+    "replace",
+    "review",
+    "retest",
+    "reregister",
+    "cancel",
+    "check",
+    "custom",
+}
+
 
 class ItemValidationError(ValueError):
     """Raised for invalid item input."""
@@ -97,6 +108,8 @@ class ExpiryItem:
     important: bool = False
     expose_entity: bool = False
     requires_action: bool = True
+    action_type: str = "renew"
+    custom_action_label: str | None = None
     actionable_mode: str = "offset"
     actionable_offset_value: int = 30
     actionable_offset_unit: str = "days"
@@ -137,6 +150,18 @@ class ExpiryItem:
         assert name is not None and expiry is not None
         category = _text(data.get("category", "Other"), "category", required=True)
         assert category is not None
+        action_type = data.get("action_type", "renew")
+        if action_type not in ACTION_TYPES:
+            raise ItemValidationError(
+                "action_type must be renew, replace, review, retest, reregister, cancel, check, or custom"
+            )
+        custom_action_label = _text(data.get("custom_action_label"), "custom_action_label")
+        if custom_action_label and len(custom_action_label) > 80:
+            raise ItemValidationError("custom_action_label is too long")
+        if action_type == "custom" and custom_action_label is None:
+            raise ItemValidationError("custom_action_label is required for custom action type")
+        if action_type != "custom":
+            custom_action_label = None
         mode = data.get("actionable_mode", "offset")
         if mode not in {"immediate", "offset", "date"}:
             raise ItemValidationError("actionable_mode must be immediate, offset, or date")
@@ -201,6 +226,8 @@ class ExpiryItem:
             category=category,
             aliases=_aliases(data.get("aliases")),
             notes=_text(data.get("notes"), "notes"),
+            action_type=action_type,
+            custom_action_label=custom_action_label,
             actionable_mode=mode,
             actionable_offset_value=_positive_int(
                 data.get("actionable_offset_value", 30), "actionable_offset_value"
