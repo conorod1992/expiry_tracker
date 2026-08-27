@@ -109,7 +109,9 @@ async def async_register_services(hass: HomeAssistant) -> None:
         try:
             return {
                 "item": decorate(
-                    await get_manager(hass).async_close(call.data["item_id"], call.data.get("reason"))
+                    await get_manager(hass).async_close(
+                        call.data["item_id"], call.data.get("reason")
+                    )
                 )
             }
         except (ItemNotFoundError, ValueError) as err:
@@ -172,9 +174,7 @@ async def async_register_services(hass: HomeAssistant) -> None:
         DOMAIN,
         "close_item",
         close,
-        schema=vol.Schema(
-            {vol.Required("item_id"): cv.string, vol.Optional("reason"): cv.string}
-        ),
+        schema=vol.Schema({vol.Required("item_id"): cv.string, vol.Optional("reason"): cv.string}),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
