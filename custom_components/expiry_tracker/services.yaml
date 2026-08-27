@@ -5,6 +5,10 @@ create_item:
     name: {required: true, selector: {text: {}}}
     expiry_date: {required: true, selector: {date: {}}}
     category: {selector: {text: {}}}
+    requires_action:
+      name: Needs action
+      description: Whether the item should become actionable/urgent and remain outstanding after expiry.
+      selector: {boolean: {}}
 update_item:
   name: Update item
   description: Update explicit fields on an item using its stable ID.
@@ -17,10 +21,24 @@ delete_item:
     item_id: {required: true, selector: {text: {}}}
 renew_item:
   name: Renew item
-  description: Retain the previous expiry in history, reset escalation state, and set a new expiry. The date may be omitted only when recurrence is explicitly configured.
+  description: Retain the previous expiry in history, reset escalation state, and set a new expiry. The date may be omitted only when recurrence is explicitly configured; overdue recurring items advance to the next future expiry.
   fields:
     item_id: {required: true, selector: {text: {}}}
     new_expiry_date: {selector: {date: {}}}
+close_item:
+  name: Close item
+  description: Archive an item without deleting it. Closed items retain their history and stop appearing in active expiry, notification, sensor, and calendar workflows.
+  fields:
+    item_id: {required: true, selector: {text: {}}}
+    reason:
+      name: Reason
+      description: Optional reason such as no longer needed, not renewing, or replaced.
+      selector: {text: {}}
+reopen_item:
+  name: Reopen item
+  description: Return a closed item to active tracking while preserving its history.
+  fields:
+    item_id: {required: true, selector: {text: {}}}
 acknowledge_item:
   name: Dismiss current reminder
   description: Dismiss the current attention stage without marking the item renewed. Later stages require attention again.
@@ -33,24 +51,24 @@ reset_acknowledgement:
     item_id: {required: true, selector: {text: {}}}
 search_items:
   name: Search items
-  description: Search by name, alias, or category and return structured response data.
+  description: Search active items by name, alias, or category and return structured response data.
   fields:
     query: {required: true, selector: {text: {}}}
 get_upcoming:
   name: Get upcoming expiries
-  description: Return enabled expiries inside a day horizon.
+  description: Return enabled active expiries inside a day horizon.
 get_actionable:
   name: Get actionable items
-  description: Return unacknowledged items whose actionable window has begun.
+  description: Return unacknowledged active items whose actionable window has begun.
 get_urgent:
   name: Get urgent items
-  description: Return urgent or expired items.
+  description: Return urgent active items.
 get_expired:
   name: Get expired items
-  description: Return expired items.
+  description: Return expired active items, including passive expiries that do not require action.
 get_between:
   name: Get items between dates
-  description: Return expiry dates inside an inclusive range.
+  description: Return active expiry dates inside an inclusive range.
   fields:
     start: {required: true, selector: {date: {}}}
     end: {required: true, selector: {date: {}}}
