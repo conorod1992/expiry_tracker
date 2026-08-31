@@ -32,10 +32,10 @@ CREATE_FIELDS = {
     ),
     vol.Optional("actionable_offset_unit", default="days"): vol.In(["days", "months"]),
     vol.Optional("actionable_from"): vol.Any(None, cv.string),
-    vol.Optional("warning_thresholds", default=[180, 90, 30, 7, 1]): vol.All(
+    vol.Optional("warning_thresholds"): vol.All(
         cv.ensure_list, [vol.All(vol.Coerce(int), vol.Range(min=0, max=36500))]
     ),
-    vol.Optional("urgent_days_before", default=7): vol.All(
+    vol.Optional("urgent_days_before"): vol.All(
         vol.Coerce(int), vol.Range(min=0, max=36500)
     ),
     vol.Optional("notify_actionable", default=True): cv.boolean,
