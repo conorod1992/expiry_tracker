@@ -353,14 +353,21 @@ class ReminderBackend:
         )
 
 
-async def async_cleanup_reminders(hass: HomeAssistant) -> None:
-    """Deactivate the backend and best-effort remove all source-owned reminders."""
+async def async_cleanup_reminders(
+    hass: HomeAssistant, *, remove_remote: bool = True
+) -> bool:
+    """Deactivate the backend and optionally remove all source-owned reminders."""
     hass.data[_ACTIVE_DATA_KEY] = False
-    backend = hass.data.pop(_BACKEND_DATA_KEY, None)
+    backend = hass.data.get(_BACKEND_DATA_KEY)
     if not isinstance(backend, ReminderBackend):
-        return
+        return True
     backend.manager.set_change_listener(None)
-    await backend.async_remove_all()
+    if not remove_remote:
+        return True
+    if not await backend.async_remove_all():
+        return False
+    hass.data.pop(_BACKEND_DATA_KEY, None)
+    return True
 
 
 async def async_setup_reminders(
@@ -368,8 +375,23 @@ async def async_setup_reminders(
 ) -> CALLBACK_TYPE | None:
     """Enable the adapter only after its owner and public service contract are verified."""
     hass.data[_ACTIVE_DATA_KEY] = False
+    previous_backend = hass.data.get(_BACKEND_DATA_KEY)
+    if not entry.options.get(CONF_USE_REMINDERS, False):
+        if isinstance(previous_backend, ReminderBackend):
+            await async_cleanup_reminders(hass)
+            return None
+        if not reminders_available(hass):
+            return None
+        owner_user_id = await _owner_user_id(hass)
+        if owner_user_id is None:
+            return None
+        cleanup_backend = ReminderBackend(hass, manager, owner_user_id)
+        hass.data[_BACKEND_DATA_KEY] = cleanup_backend
+        if await cleanup_backend.async_remove_all():
+            hass.data.pop(_BACKEND_DATA_KEY, None)
+        return None
     hass.data.pop(_BACKEND_DATA_KEY, None)
-    if not entry.options.get(CONF_USE_REMINDERS, False) or not reminders_available(hass):
+    if not reminders_available(hass):
         return None
     owner_user_id = await _owner_user_id(hass)
     if owner_user_id is None:
