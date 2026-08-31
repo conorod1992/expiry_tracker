@@ -51,9 +51,13 @@ reset_acknowledgement:
     item_id: {required: true, selector: {text: {}}}
 search_items:
   name: Search items
-  description: Search active items by name, alias, or category and return structured response data.
+  description: Search items by name, alias, or category and return structured response data.
   fields:
     query: {required: true, selector: {text: {}}}
+    include_closed:
+      name: Include archived items
+      description: Also search items that have been closed.
+      selector: {boolean: {}}
 get_upcoming:
   name: Get upcoming expiries
   description: Return enabled active expiries inside a day horizon.
