@@ -64,7 +64,7 @@ if (Panel && !Panel.prototype.__expiryDashboardEnhanced) {
     const state = this.dashboardState();
     const selected = selectedItems(this.items, state.selected);
     const admin = this.settings.is_admin;
-    return `<section class="dashboard-controls"><div class="view-switch"><button class="button ${state.mode==="cards"?"primary":"secondary"} small" data-action="view-cards"><ha-icon icon="mdi:view-grid-outline"></ha-icon>Cards</button><button class="button ${state.mode==="timeline"?"primary":"secondary"} small" data-action="view-timeline"><ha-icon icon="mdi:timeline-clock-outline"></ha-icon>Timeline</button></div>${admin?`<div class="bulk-actions"><span>${selected.length?`${selected.length} selected`:"Bulk actions"}</span><button class="button secondary small" data-action="select-visible">${selected.length===this.items.length&&this.items.length?"Clear selection":"Select visible"}</button>${selected.length?`<button class="button secondary small" data-action="bulk-enable">Enable</button><button class="button secondary small" data-action="bulk-disable">Disable</button><button class="button secondary small" data-action="bulk-close">Close</button>`:""}</div>`:""}</section>`;
+    return `<section class="dashboard-controls"><div class="view-switch"><button class="button ${state.mode==="cards"?"primary":"secondary"} small" data-action="view-cards"><ha-icon icon="mdi:view-grid-outline"></ha-icon>Cards</button><button class="button ${state.mode==="timeline"?"primary":"secondary"} small" data-action="view-timeline"><ha-icon icon="mdi:timeline-clock-outline"></ha-icon>Timeline</button></div>${admin?`<div class="bulk-actions"><span>${selected.length?`${selected.length} selected`:"Bulk actions"}</span><button class="button secondary small" data-action="select-visible">${selected.length===this.items.length&&this.items.length?"Clear selection":"Select visible"}</button>${selected.length?`<button class="button secondary small" data-action="bulk-enable">Enable</button><button class="button secondary small" data-action="bulk-disable">Disable</button><button class="button secondary small" data-action="bulk-close">Archive</button>`:""}</div>`:""}</section>`;
   };
 
   Panel.prototype.timelineView = function timelineView() {
@@ -76,7 +76,7 @@ if (Panel && !Panel.prototype.__expiryDashboardEnhanced) {
   Panel.prototype.archiveView = function archiveView() {
     const rows = this.closedItems || [];
     if (!rows.length) return "";
-    return `<details class="archive-section"><summary><strong>Closed / archive</strong> <span class="count">${rows.length}</span></summary><p class="help">Closed items keep their history but no longer take part in reminders, sensors, calendar or active expiry views.</p><div class="archive-list">${rows.map((item)=>`<div class="archive-row"><div><strong>${this.esc(item.name)}</strong><br><small>Expired ${formatDate(item.expiry_date,this.locale,true)}${item.closed_reason?` · ${this.esc(item.closed_reason)}`:""}</small></div>${this.settings.is_admin?`<button class="button secondary small" data-reopen-id="${item.id}"><ha-icon icon="mdi:archive-arrow-up-outline"></ha-icon>Reopen</button>`:""}</div>`).join("")}</div></details>`;
+    return `<details class="archive-section"><summary><strong>Archived items</strong> <span class="count">${rows.length}</span></summary><p class="help">Archived items keep their history but no longer take part in reminders, sensors, calendar or active expiry views.</p><div class="archive-list">${rows.map((item)=>`<div class="archive-row"><div><strong>${this.esc(item.name)}</strong><br><small>Expired ${formatDate(item.expiry_date,this.locale,true)}${item.closed_reason?` · ${this.esc(item.closed_reason)}`:""}</small></div>${this.settings.is_admin?`<button class="button secondary small" data-reopen-id="${item.id}"><ha-icon icon="mdi:archive-arrow-up-outline"></ha-icon>Reopen</button>`:""}</div>`).join("")}</div></details>`;
   };
 
   Panel.prototype.listView = function listView() {
@@ -135,16 +135,33 @@ if (Panel && !Panel.prototype.__expiryDashboardEnhanced) {
     const state = this.dashboardState();
     const rows = selectedItems(this.items, state.selected);
     if (!rows.length) return;
-    try {
-      for (const item of rows) {
-        if (action === "close") await this.call("close", { item_id: item.id, reason: "Closed in bulk" });
-        else await this.call("update", { item_id: item.id, enabled: action === "enable" });
+    const succeeded = [];
+    const failed = [];
+    for (const item of rows) {
+      try {
+        if (action === "close") {
+          await this.call("close", { item_id: item.id, reason: "Archived in bulk" });
+        } else {
+          await this.call("update", { item_id: item.id, enabled: action === "enable" });
+        }
+        succeeded.push(item);
+      } catch (error) {
+        failed.push({ item, error });
       }
+    }
+    state.selected = new Set(failed.map(({ item }) => item.id));
+    await this.refresh();
+    if (!failed.length) {
       state.selected.clear();
-      await this.refresh();
-      this.showToast(`${rows.length} item${rows.length===1?"":"s"} updated`);
-    } catch (error) {
-      this.handleError(error);
+      this.showToast(`${succeeded.length} item${succeeded.length===1?"":"s"} updated`);
+      return;
+    }
+    const names = failed.slice(0, 3).map(({ item }) => item.name).join(", ");
+    const extra = failed.length > 3 ? ` and ${failed.length - 3} more` : "";
+    this.error = `${succeeded.length} of ${rows.length} item${rows.length===1?"":"s"} updated. ${failed.length} could not be updated: ${names}${extra}.`;
+    this.render();
+    if (succeeded.length) {
+      this.showToast(`${succeeded.length} item${succeeded.length===1?"":"s"} updated; failed items remain selected`);
     }
   };
 
