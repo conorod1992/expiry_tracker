@@ -48,6 +48,17 @@ def _completion_action(item: ExpiryItem) -> dict[str, str]:
     return {"id": "renewed", "label": _completion_label(item)}
 
 
+def _stage_notifications_enabled(item: ExpiryItem, event: str | None) -> bool:
+    """Return whether an attention milestone is enabled for this item."""
+    if event == AttentionStage.ACTIONABLE.value:
+        return item.notify_actionable
+    if event == AttentionStage.URGENT.value:
+        return item.notify_urgent
+    if event == AttentionStage.EXPIRY.value:
+        return item.notify_expiry
+    return False
+
+
 def reminders_available(hass: HomeAssistant) -> bool:
     """Check the public service contract; never import Reminders internals."""
     return all(hass.services.has_service(REMINDERS_DOMAIN, service) for service in _SERVICES)
@@ -83,21 +94,25 @@ class ReminderBackend:
         today = local_today()
         state = calculate_state(item, today)
         dates: dict[str, date] = {
-            **{
-                f"warning_{days}": item.expiry_date - timedelta(days=days)
-                for days in item.warning_thresholds
-            },
-            "expiry": item.expiry_date,
+            f"warning_{days}": item.expiry_date - timedelta(days=days)
+            for days in item.warning_thresholds
         }
+        if item.notify_expiry:
+            dates["expiry"] = item.expiry_date
         if item.requires_action:
-            dates["actionable"] = state.actionable_date
-            dates["urgent"] = state.urgent_date
+            if item.notify_actionable:
+                dates["actionable"] = state.actionable_date
+            if item.notify_urgent:
+                dates["urgent"] = state.urgent_date
         current = state.attention_stage.value if state.attention_stage else None
+        enabled_current = current if _stage_notifications_enabled(item, current) else None
         result: dict[str, dict[str, Any]] = {}
         for event, due_date in dates.items():
             warning = event.startswith("warning_")
             passive_expiry = event == "expiry" and not item.requires_action
-            if warning and (due_date < today or (due_date == today and current is not None)):
+            if warning and (
+                due_date < today or (due_date == today and enabled_current is not None)
+            ):
                 continue
             if not warning and not passive_expiry and due_date <= today and event != current:
                 continue
