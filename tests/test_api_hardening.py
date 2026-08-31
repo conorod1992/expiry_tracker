@@ -131,9 +131,8 @@ def test_reminders_milestones_tolerate_early_dates(monkeypatch):
     item = ExpiryItem.create(
         item_data(
             expiry_date="0001-01-02",
-            actionable_offset_value=36500,
+            requires_action=False,
             warning_thresholds=[36500],
-            urgent_days_before=36500,
         )
     )
     monkeypatch.setattr(
