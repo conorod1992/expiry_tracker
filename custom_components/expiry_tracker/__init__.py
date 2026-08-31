@@ -13,6 +13,7 @@ from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import (
     CONF_SHOW_PANEL,
+    CONF_USE_REMINDERS,
     DEFAULT_SHOW_PANEL,
     DOMAIN,
     PANEL_ELEMENT,
@@ -65,13 +66,20 @@ async def async_unload_entry(hass: HomeAssistant, entry: ExpiryTrackerConfigEntr
     result = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if not result:
         return False
-    await async_cleanup_reminders(hass)
+    await async_cleanup_reminders(hass, remove_remote=entry.disabled_by is not None)
     frontend.async_remove_panel(hass, PANEL_URL, warn_if_unknown=False)
     async_unregister_services(hass)
     return True
 
 
+async def async_remove_entry(hass: HomeAssistant, entry: ExpiryTrackerConfigEntry) -> None:
+    """Remove source-owned Reminders when the Expiry Tracker entry is deleted."""
+    await async_cleanup_reminders(hass)
+
+
 async def _options_updated(hass: HomeAssistant, entry: ExpiryTrackerConfigEntry) -> None:
+    if not entry.options.get(CONF_USE_REMINDERS, False):
+        await async_cleanup_reminders(hass)
     await hass.config_entries.async_reload(entry.entry_id)
 
 
