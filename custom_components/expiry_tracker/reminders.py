@@ -151,10 +151,13 @@ class ReminderBackend:
         return result
 
     async def _call(self, service: str, data: dict[str, Any], *, response: bool = False) -> Any:
+        payload = dict(data)
+        if service in {"create", "list"}:
+            payload.setdefault("user_id", self.owner_user_id)
         return await self.hass.services.async_call(
             REMINDERS_DOMAIN,
             service,
-            data,
+            payload,
             blocking=True,
             context=Context(user_id=self.owner_user_id),
             return_response=response,
