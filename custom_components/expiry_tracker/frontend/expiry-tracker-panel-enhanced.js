@@ -18,6 +18,52 @@ if (Panel && !Panel.prototype.__expiryWorkflowEnhanced) {
 
   Panel.prototype.__expiryWorkflowEnhanced = true;
 
+  Panel.prototype.refreshDeliverySettings = async function refreshDeliverySettings(useReminders) {
+    const backend = useReminders ? "reminders" : "native";
+    const deadline = Date.now() + 30000;
+    let delay = 200;
+    let lastError = null;
+    while (Date.now() < deadline) {
+      try {
+        const settings = await this.call("settings");
+        if (
+          settings.options?.use_reminders === useReminders &&
+          settings.capabilities?.delivery_backend === backend
+        ) {
+          this.settings = settings;
+          return;
+        }
+        lastError = null;
+      } catch (error) {
+        // A config-entry reload can briefly interrupt the WebSocket request.
+        lastError = error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay = Math.min(Math.round(delay * 1.5), 1500);
+    }
+    if (lastError) throw lastError;
+    throw new Error(
+      `Delivery backend did not switch to ${useReminders ? "Reminders" : "built-in notifications"}`,
+    );
+  };
+
+  Panel.prototype.formReminders = function formReminders(item, reminders) {
+    const active = this.remindersActive;
+    const delivery = active
+      ? '<div class="delivery-status"><strong>Delivered by Reminders</strong><small>Expiry Tracker decides when reminders occur. These dates are synchronized to Reminders; it handles delivery, snoozing, dismissal and escalation.</small></div>'
+      : '<div class="delivery-status"><strong>Using built-in notifications</strong><small>Expiry Tracker delivers notifications directly through Home Assistant.</small></div>';
+    const repeat = Boolean(item.require_acknowledgement && item.repeat_until_acknowledged);
+    const nativeControls = `<div class="native-reminder-controls" ${active ? "hidden" : ""}><label class="choice-card"><input type="checkbox" name="require_acknowledgement" ${repeat ? "checked" : ""}><ha-icon icon="mdi:bell-check-outline"></ha-icon><span><strong>Repeat until dismissed</strong><small>Repeat the current actionable, urgent or expiry notification until you dismiss that stage. Dismissal never marks the item complete.</small></span></label><input type="checkbox" name="repeat_until_acknowledged" hidden aria-hidden="true" tabindex="-1" ${repeat ? "checked" : ""}><div class="ack-options"><label><span>Repeat every</span><div class="joined-control"><input type="number" min="1" name="repeat_interval_hours" value="${item.repeat_interval_hours || 24}"><span class="suffix">hours</span></div></label></div></div>`;
+    const managed = active
+      ? '<p class="help managed-by-reminders">Dismissal and escalation are handled by Reminders.</p>'
+      : "";
+    return this.section(
+      3,
+      "Reminders",
+      `${delivery}<p class="help">Reminders give you advance notice. They do not mean the item can already be renewed or dealt with.</p><div class="field-heading"><span>Reminder schedule</span><small>Add as many reminders as you need.</small></div><div id="reminder-list" class="reminder-list">${reminders.map((days, index) => this.reminderRow(days, index)).join("")}</div><button type="button" class="button secondary add-reminder" data-action="add-reminder"><ha-icon icon="mdi:plus"></ha-icon>Add reminder</button><div class="form-grid reminder-settings"><label><span>Treat as urgent</span><div class="joined-control"><input type="number" min="0" name="urgent_days_before" value="${item.urgent_days_before ?? this.settings.options?.default_urgent_days ?? 7}"><span class="suffix">days before expiry</span></div></label></div><div class="notification-options"><label class="check-row"><input type="checkbox" name="notify_actionable" ${item.notify_actionable !== false ? "checked" : ""}><span>Notify when I can start dealing with it</span></label><label class="check-row"><input type="checkbox" name="notify_urgent" ${item.notify_urgent !== false ? "checked" : ""}><span>Notify when it becomes urgent</span></label><label class="check-row"><input type="checkbox" name="notify_expiry" ${item.notify_expiry !== false ? "checked" : ""}><span>Notify on the expiry date</span></label></div>${nativeControls}${managed}`,
+    );
+  };
+
   Panel.prototype.listView = function listView() {
     const groups = groupItems(this.items);
     if (!groups.informational.length) return originalListView.call(this);
@@ -66,6 +112,9 @@ if (Panel && !Panel.prototype.__expiryWorkflowEnhanced) {
     originalUpdateFormConditions.call(this);
     const form = this.shadowRoot.querySelector("#item-form");
     if (!form) return;
+    const repeat = form.elements.require_acknowledgement;
+    const legacyRepeat = form.elements.repeat_until_acknowledged;
+    if (repeat && legacyRepeat) legacyRepeat.checked = repeat.checked;
     const custom = form.elements.action_type?.value === "custom";
     const field = form.querySelector(".custom-action-label");
     if (!field) return;
@@ -135,6 +184,12 @@ if (Panel && !Panel.prototype.__expiryWorkflowEnhanced) {
           ? "Completing this action closes the item without deleting its history."
           : "You’ll confirm the next expiry date after completing the real-world task. It is never changed automatically.",
       );
+    if (!this.remindersActive && !(item.require_acknowledgement && item.repeat_until_acknowledged)) {
+      html = html.replace(
+        /<dt>Repeats<\/dt><dd>Every [\s\S]*? until dismissed<\/dd>/,
+        "<dt>Repeats</dt><dd>No repeated reminders</dd>",
+      );
+    }
     if (isPassiveItem(item)) {
       const title = item.days_until_expiry < 0 ? "Expired — no action needed" : "Informational tracking only";
       html = html.replace(
