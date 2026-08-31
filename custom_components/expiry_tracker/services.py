@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Coroutine
 from datetime import timedelta
+from functools import wraps
 from typing import Any, NoReturn
 
 import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import HomeAssistantError, Unauthorized
 from homeassistant.helpers import config_validation as cv
 
 from .helpers import decorate, get_manager, local_today, parse_date
@@ -34,12 +36,34 @@ QUERIES = (
     "get_between",
 )
 _UPDATE_KEYS = {str(key.schema) for key in UPDATE_FIELDS}
+_ServiceHandler = Callable[[ServiceCall], Coroutine[Any, Any, dict[str, Any]]]
 
 
 def _error(err: Exception) -> NoReturn:
     if isinstance(err, ItemNotFoundError):
         raise HomeAssistantError(f"Unknown expiry item ID: {err.args[0]}") from err
     raise HomeAssistantError(str(err)) from err
+
+
+async def _require_admin(hass: HomeAssistant, call: ServiceCall) -> None:
+    """Require admin for user-originated global mutation services."""
+    user_id = call.context.user_id
+    if user_id is None:
+        return
+    user = await hass.auth.async_get_user(user_id)
+    if user is None or not user.is_admin:
+        raise Unauthorized(context=call.context)
+
+
+def _admin_only(hass: HomeAssistant, handler: _ServiceHandler) -> _ServiceHandler:
+    """Wrap a mutation service with the same admin boundary as the panel."""
+
+    @wraps(handler)
+    async def wrapped(call: ServiceCall) -> dict[str, Any]:
+        await _require_admin(hass, call)
+        return await handler(call)
+
+    return wrapped
 
 
 def _query(call: ServiceCall, **fixed: bool) -> dict[str, Any]:
@@ -142,7 +166,7 @@ async def async_register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN,
         "create_item",
-        create,
+        _admin_only(hass, create),
         schema=vol.Schema(CREATE_FIELDS),
         supports_response=SupportsResponse.OPTIONAL,
     )
@@ -150,21 +174,21 @@ async def async_register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN,
         "update_item",
-        update,
+        _admin_only(hass, update),
         schema=vol.Schema(update_schema),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "delete_item",
-        delete,
+        _admin_only(hass, delete),
         schema=vol.Schema({vol.Required("item_id"): cv.string}),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "renew_item",
-        renew,
+        _admin_only(hass, renew),
         schema=vol.Schema(
             {vol.Required("item_id"): cv.string, vol.Optional("new_expiry_date"): cv.string}
         ),
@@ -173,14 +197,14 @@ async def async_register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN,
         "close_item",
-        close,
+        _admin_only(hass, close),
         schema=vol.Schema({vol.Required("item_id"): cv.string, vol.Optional("reason"): cv.string}),
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "reopen_item",
-        reopen,
+        _admin_only(hass, reopen),
         schema=vol.Schema({vol.Required("item_id"): cv.string}),
         supports_response=SupportsResponse.OPTIONAL,
     )
@@ -190,14 +214,14 @@ async def async_register_services(hass: HomeAssistant) -> None:
     hass.services.async_register(
         DOMAIN,
         "acknowledge_item",
-        acknowledge,
+        _admin_only(hass, acknowledge),
         schema=ack_schema,
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "reset_acknowledgement",
-        acknowledge,
+        _admin_only(hass, acknowledge),
         schema=vol.Schema(
             {
                 vol.Required("item_id"): cv.string,
