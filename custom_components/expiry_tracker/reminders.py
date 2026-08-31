@@ -256,9 +256,8 @@ class ReminderBackend:
             if not isinstance(listed, dict) or not isinstance(listed.get("reminders"), list):
                 raise ValueError("reminders.list returned an invalid response")
             for reminder in listed["reminders"]:
-                if (
-                    reminder.get("source") == REMINDERS_SOURCE
-                    and (reminder_id := self._id(reminder))
+                if reminder.get("source") == REMINDERS_SOURCE and (
+                    reminder_id := self._id(reminder)
                 ):
                     await self._call("delete", {"reminder_id": reminder_id})
             return True
@@ -353,9 +352,7 @@ class ReminderBackend:
         )
 
 
-async def async_cleanup_reminders(
-    hass: HomeAssistant, *, remove_remote: bool = True
-) -> bool:
+async def async_cleanup_reminders(hass: HomeAssistant, *, remove_remote: bool = True) -> bool:
     """Deactivate the backend and optionally remove all source-owned reminders."""
     hass.data[_ACTIVE_DATA_KEY] = False
     backend = hass.data.get(_BACKEND_DATA_KEY)
