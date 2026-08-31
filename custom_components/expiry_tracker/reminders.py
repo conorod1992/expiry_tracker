@@ -55,9 +55,7 @@ async def _owner_user_id(hass: HomeAssistant) -> str | None:
     """Resolve the single active Home Assistant owner for Reminders ownership."""
     users = await hass.auth.async_get_users()
     owners = [
-        user.id
-        for user in users
-        if user.is_owner and user.is_active and not user.system_generated
+        user.id for user in users if user.is_owner and user.is_active and not user.system_generated
     ]
     if len(owners) != 1:
         _LOGGER.warning(
