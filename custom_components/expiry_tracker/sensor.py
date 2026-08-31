@@ -18,6 +18,26 @@ from .helpers import local_today
 from .manager import ExpiryTrackerManager
 from .models import ExpiryItem
 
+_ITEM_UNIQUE_ID_PREFIX = "item_"
+
+
+def _remove_orphaned_item_registry_entries(
+    hass: HomeAssistant,
+    entry: ConfigEntry[ExpiryTrackerManager],
+    live_item_ids: set[str],
+) -> None:
+    """Remove per-item registry entries whose source item no longer exists."""
+    registry = er.async_get(hass)
+    for registry_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        unique_id = registry_entry.unique_id
+        if (
+            registry_entry.domain == "sensor"
+            and registry_entry.platform == DOMAIN
+            and unique_id.startswith(_ITEM_UNIQUE_ID_PREFIX)
+            and unique_id.removeprefix(_ITEM_UNIQUE_ID_PREFIX) not in live_item_ids
+        ):
+            registry.async_remove(registry_entry.entity_id)
+
 
 async def async_setup_entry(
     hass: HomeAssistant,
@@ -40,22 +60,21 @@ async def async_setup_entry(
         hass.async_create_task(_reconcile(), "expiry_tracker_reconcile_sensors")
 
     async def _reconcile() -> None:
+        items = manager.list_items()
+        live_item_ids = {item.id for item in items}
         desired = {
-            item.id
-            for item in manager.list_items()
-            if item.enabled and not item.closed and item.expose_entity
+            item.id for item in items if item.enabled and not item.closed and item.expose_entity
         }
         for item_id, entity in list(active.items()):
             if item_id not in desired:
                 active.pop(item_id)
                 await entity.async_remove()
-                try:
-                    manager.get_item(item_id)
-                except KeyError:
-                    registry = er.async_get(hass)
-                    entity_id = registry.async_get_entity_id("sensor", DOMAIN, f"item_{item_id}")
-                    if entity_id:
-                        registry.async_remove(entity_id)
+
+        # Registry entries are intentionally retained while an item merely stops
+        # exposing an entity, so entity customizations survive re-enabling. Once
+        # the source item is deleted, however, no registry entry should remain.
+        _remove_orphaned_item_registry_entries(hass, entry, live_item_ids)
+
         new = []
         for item_id in desired - active.keys():
             active[item_id] = ExpiryItemSensor(manager, item_id)
