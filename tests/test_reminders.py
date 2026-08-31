@@ -163,6 +163,57 @@ async def test_milestones_have_stable_source_identity_and_do_not_replay_past_war
     assert milestones["actionable"]["allow_manual_completion"] is False
 
 
+async def test_stage_notification_toggles_apply_to_reminders_backend(backend):
+    adapter, manager = backend
+    item = await manager.async_create_item(
+        item_data(
+            expiry_date="2026-09-10",
+            warning_thresholds=[7],
+            actionable_offset_value=5,
+            notify_actionable=False,
+            notify_urgent=False,
+            notify_expiry=False,
+        )
+    )
+
+    milestones = adapter._milestones(item)
+
+    assert set(milestones) == {"warning_7"}
+
+
+async def test_disabled_attention_stage_does_not_hide_same_day_warning(backend):
+    adapter, manager = backend
+    item = await manager.async_create_item(
+        item_data(
+            expiry_date="2026-09-10",
+            warning_thresholds=[17],
+            actionable_mode="date",
+            actionable_from="2026-08-24",
+            urgent_days_before=1,
+            notify_actionable=False,
+        )
+    )
+
+    milestones = adapter._milestones(item)
+
+    assert "actionable" not in milestones
+    assert "warning_17" in milestones
+
+
+async def test_passive_expiry_toggle_applies_to_reminders_backend(backend):
+    adapter, manager = backend
+    item = await manager.async_create_item(
+        item_data(
+            expiry_date="2026-09-10",
+            requires_action=False,
+            warning_thresholds=[],
+            notify_expiry=False,
+        )
+    )
+
+    assert adapter._milestones(item) == {}
+
+
 async def test_custom_completion_label_respects_reminders_external_action_limit(backend):
     adapter, manager = backend
     label = "x" * 80
