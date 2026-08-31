@@ -35,9 +35,7 @@ CREATE_FIELDS = {
     vol.Optional("warning_thresholds"): vol.All(
         cv.ensure_list, [vol.All(vol.Coerce(int), vol.Range(min=0, max=36500))]
     ),
-    vol.Optional("urgent_days_before"): vol.All(
-        vol.Coerce(int), vol.Range(min=0, max=36500)
-    ),
+    vol.Optional("urgent_days_before"): vol.All(vol.Coerce(int), vol.Range(min=0, max=36500)),
     vol.Optional("notify_actionable", default=True): cv.boolean,
     vol.Optional("notify_urgent", default=True): cv.boolean,
     vol.Optional("notify_expiry", default=True): cv.boolean,
