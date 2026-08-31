@@ -21,7 +21,6 @@ from .const import (
     PANEL_URL,
     PLATFORMS,
     SIGNAL_UPDATED,
-    VERSION,
 )
 from .helpers import local_date
 from .manager import ExpiryTrackerManager
@@ -98,7 +97,7 @@ async def _setup_frontend(hass: HomeAssistant, entry: ExpiryTrackerConfigEntry) 
             webcomponent_name=PANEL_ELEMENT,
             sidebar_title="Expiry Tracker",
             sidebar_icon="mdi:calendar-alert",
-            module_url=f"{PANEL_STATIC_URL}/expiry-tracker-dashboard.js?v={VERSION}",
+            module_url=f"{PANEL_STATIC_URL}/expiry-tracker-dashboard.js",
             require_admin=False,
             config_panel_domain=DOMAIN,
         )
