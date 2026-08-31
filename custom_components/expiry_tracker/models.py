@@ -57,13 +57,13 @@ def _date(value: Any, field: str, *, optional: bool = False) -> date | None:
     if value is None and optional:
         return None
     try:
-        return (
-            date.fromisoformat(value)
-            if isinstance(value, str)
-            else value
-            if isinstance(value, date)
-            else date.fromisoformat("")
-        )
+        if isinstance(value, str):
+            return date.fromisoformat(value)
+        if isinstance(value, datetime):
+            raise ValueError
+        if isinstance(value, date):
+            return value
+        raise ValueError
     except ValueError as err:
         raise ItemValidationError(f"{field} must be an ISO date (YYYY-MM-DD)") from err
 
