@@ -145,14 +145,20 @@ export function calculateActionDate(expiry, mode, amount, unit, specificDate) {
   return toIsoDate(parsed);
 }
 
+export function isPassiveItem(item) {
+  return item?.requires_action === false;
+}
+
 export function groupItems(items) {
-  const groups = { attention: [], acknowledged: [], comingUp: [], later: [] };
+  const groups = { attention: [], acknowledged: [], informational: [], comingUp: [], later: [] };
   for (const item of items) {
     const outstanding = ["actionable", "urgent", "expired"].includes(item.status);
-    if (item.enabled && !item.acknowledged && (item.requires_attention || outstanding)) {
+    if (item.enabled && item.requires_attention) {
       groups.attention.push(item);
-    } else if (item.enabled && item.acknowledged && outstanding) {
+    } else if (item.enabled && !isPassiveItem(item) && item.acknowledged && outstanding) {
       groups.acknowledged.push(item);
+    } else if (item.enabled && isPassiveItem(item) && item.status === "expired") {
+      groups.informational.push(item);
     } else if (
       item.enabled &&
       (item.status !== "valid" || item.important || item.days_until_expiry <= 180)

@@ -1,9 +1,11 @@
 import "./expiry-tracker-panel.js";
+import { groupItems, isPassiveItem, recurrenceLabel } from "./expiry-tracker-helpers.mjs";
 import { ACTION_TYPES, actionInfo, matchingAlias } from "./expiry-tracker-workflow-helpers.mjs";
 
 const Panel = customElements.get("expiry-tracker-panel");
 
 if (Panel && !Panel.prototype.__expiryWorkflowEnhanced) {
+  const originalListView = Panel.prototype.listView;
   const originalItemCard = Panel.prototype.itemCard;
   const originalAcknowledgedSection = Panel.prototype.acknowledgedSection;
   const originalDetailView = Panel.prototype.detailView;
@@ -15,6 +17,27 @@ if (Panel && !Panel.prototype.__expiryWorkflowEnhanced) {
   const originalHistoryView = Panel.prototype.historyView;
 
   Panel.prototype.__expiryWorkflowEnhanced = true;
+
+  Panel.prototype.listView = function listView() {
+    const groups = groupItems(this.items);
+    if (!groups.informational.length) return originalListView.call(this);
+    if (!this.items.length && !this.hasFilters()) {
+      return `${this.summaryView()}${this.filtersView()}${this.firstUseView()}`;
+    }
+    return `${this.summaryView()}${this.filtersView()}<main class="groups">${
+      this.hasFilters() && !this.items.length
+        ? this.emptyFilteredView()
+        : `${this.attentionSection(groups.attention)}${this.acknowledgedSection(groups.acknowledged)}${this.itemSection(
+            "Expired — no action needed",
+            "These items are tracked for reference only. Their expiry does not create work or a reminder to dismiss.",
+            groups.informational,
+          )}${this.itemSection(
+            "Coming up",
+            "Items worth keeping an eye on, but which do not need action yet.",
+            groups.comingUp,
+          )}${this.laterSection(groups.later)}`
+    }</main>`;
+  };
 
   Panel.prototype.formRenewal = function formRenewal(item) {
     const selected = item.action_type || "renew";
@@ -53,11 +76,28 @@ if (Panel && !Panel.prototype.__expiryWorkflowEnhanced) {
   };
 
   Panel.prototype.itemCard = function itemCard(item, quickActions) {
+    const passive = isPassiveItem(item);
+    const displayItem = passive
+      ? {
+          ...item,
+          acknowledged: false,
+          actionable: false,
+          actionable_date: null,
+          attention_stage: null,
+          requires_attention: false,
+        }
+      : item;
     const info = actionInfo(item);
-    let html = originalItemCard.call(this, item, quickActions).replace(
+    let html = originalItemCard.call(this, displayItem, quickActions && !passive).replace(
       "Mark as renewed",
       this.esc(info.button),
     );
+    if (passive) {
+      html = html.replace(
+        '<div class="next-action"></div>',
+        '<div class="next-action">Tracked for reference — no action required</div>',
+      );
+    }
     const alias = matchingAlias(item, this.filters?.search);
     if (alias) {
       const marker = '</div></div><div class="item-side">';
@@ -95,6 +135,29 @@ if (Panel && !Panel.prototype.__expiryWorkflowEnhanced) {
           ? "Completing this action closes the item without deleting its history."
           : "You’ll confirm the next expiry date after completing the real-world task. It is never changed automatically.",
       );
+    if (isPassiveItem(item)) {
+      const title = item.days_until_expiry < 0 ? "Expired — no action needed" : "Informational tracking only";
+      html = html.replace(
+        /<section class="what-next">[\s\S]*?<\/section>/,
+        `<section class="what-next"><div><h3>${title}</h3><p>This item is tracked for its expiry date, but Expiry Tracker will not treat it as work you need to complete or a reminder you need to dismiss.</p></div></section>`,
+      );
+      html = html.replace(
+        /<section class="info-card"><h3>Dates<\/h3>[\s\S]*?<\/section>/,
+        `<section class="info-card"><h3>Dates</h3>${this.dateRow("Expires", item.expiry_date, "calendar-remove")}${this.dateRow("Reminders begin", item.warning_date, "bell-outline")}</section>`,
+      );
+      html = html.replace(
+        /<dt>Current stage<\/dt><dd>[\s\S]*?<\/dd>/,
+        "<dt>Tracking mode</dt><dd>Informational only · no dismissal needed</dd>",
+      );
+      html = html.replace(
+        /<dt>Repeats<\/dt><dd>[\s\S]*?<\/dd>/,
+        "<dt>Repeats</dt><dd>No repeated attention reminders</dd>",
+      );
+      html = html.replace(
+        /<section class="info-card"><h3>Action settings<\/h3>[\s\S]*?<\/section>/,
+        `<section class="info-card"><h3>Tracking settings</h3><dl><dt>Mode</dt><dd>Informational only</dd><dt>Typical repeat period</dt><dd>${this.esc(recurrenceLabel(item.recurrence_months))}</dd><dt>Date updates</dt><dd>Edit the item when the tracked expiry changes.</dd></dl></section>`,
+      );
+    }
     if (item.aliases?.length) {
       html = html.replace(
         '<div class="detail-grid">',
