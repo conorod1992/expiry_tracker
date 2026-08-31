@@ -5,6 +5,8 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.expiry_tracker.const import (
     CONF_DEFAULT_URGENT_DAYS,
     CONF_DEFAULT_WARNING_THRESHOLDS,
+    CONF_NOTIFICATION_SERVICE,
+    CONF_NOTIFICATION_TARGET,
     CONF_USE_REMINDERS,
     DOMAIN,
 )
@@ -114,6 +116,37 @@ async def test_non_admin_reads_but_cannot_mutate(hass, hass_ws_client, hass_read
     )
     denied = await client.receive_json()
     assert not denied["success"] and denied["error"]["code"] == "unauthorized"
+
+
+async def test_non_admin_settings_hide_notification_identifiers(
+    hass, hass_ws_client, hass_read_only_access_token
+):
+    await setup(
+        hass,
+        hass_ws_client,
+        options={
+            CONF_DEFAULT_WARNING_THRESHOLDS: [45, 10],
+            CONF_DEFAULT_URGENT_DAYS: 4,
+            CONF_USE_REMINDERS: False,
+            CONF_NOTIFICATION_SERVICE: "notify.mobile_app_personal_phone",
+            CONF_NOTIFICATION_TARGET: "private-target-id",
+        },
+    )
+    client = await hass_ws_client(hass, hass_read_only_access_token)
+    await client.send_json_auto_id({"type": "expiry_tracker/settings"})
+    result = await client.receive_json()
+
+    assert result["success"]
+    options = result["result"]["options"]
+    assert options == {
+        CONF_DEFAULT_WARNING_THRESHOLDS: [45, 10],
+        CONF_DEFAULT_URGENT_DAYS: 4,
+        CONF_USE_REMINDERS: False,
+    }
+    assert CONF_NOTIFICATION_SERVICE not in options
+    assert CONF_NOTIFICATION_TARGET not in options
+    assert "personal_phone" not in repr(result)
+    assert "private-target-id" not in repr(result)
 
 
 async def test_settings_reports_native_delivery_when_reminders_are_inactive(hass, hass_ws_client):
