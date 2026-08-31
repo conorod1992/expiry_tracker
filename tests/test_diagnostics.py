@@ -33,7 +33,9 @@ async def test_diagnostic_counts_hide_custom_category_names(manager) -> None:
     await manager.async_create_item(item_data(name="Policy", category="Insurance"))
     await manager.async_create_item(item_data(name="Private", category="Family private admin"))
     await manager.async_create_item(item_data(name="Private 2", category="Family private admin"))
-    await manager.async_create_item(item_data(name="Other private", category="Confidential project"))
+    await manager.async_create_item(
+        item_data(name="Other private", category="Confidential project")
+    )
 
     result = _diagnostic_counts(manager)
 
