@@ -12,7 +12,7 @@ from homeassistant.components.websocket_api import ActiveConnection
 from homeassistant.core import HomeAssistant, callback
 
 from .const import BUILT_IN_CATEGORIES, CONF_USE_REMINDERS, MAX_LIST_LIMIT
-from .helpers import decorate, get_entry, get_manager, local_today
+from .helpers import creation_payload, decorate, get_entry, get_manager, local_today
 from .models import ItemNotFoundError, ItemValidationError
 from .reminders import reminders_available
 from .schema import CREATE_FIELDS, UPDATE_FIELDS
@@ -44,10 +44,11 @@ def _send_error(connection: ActiveConnection, msg_id: int, err: Exception) -> No
 @callback
 def websocket_list(hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]) -> None:
     today = local_today()
+    manager = get_manager(hass)
     source = (
-        get_manager(hass).search(msg["search"], limit=MAX_LIST_LIMIT)
+        manager.search(msg["search"], limit=None, include_closed=msg["closed"])
         if msg.get("search")
-        else get_manager(hass).list_items()
+        else manager.list_items()
     )
     rows = [decorate(item, today) for item in source]
     rows = [
@@ -99,9 +100,8 @@ async def websocket_create(
     hass: HomeAssistant, connection: ActiveConnection, msg: dict[str, Any]
 ) -> None:
     try:
-        item = await get_manager(hass).async_create_item(
-            {key: value for key, value in msg.items() if key not in {"id", "type"}}
-        )
+        data = {key: value for key, value in msg.items() if key not in {"id", "type"}}
+        item = await get_manager(hass).async_create_item(creation_payload(hass, data))
         connection.send_result(msg["id"], decorate(item))
     except ItemValidationError as err:
         _send_error(connection, msg["id"], err)

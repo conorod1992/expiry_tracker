@@ -1,16 +1,23 @@
+from uuid import uuid4
+
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.expiry_tracker.const import CONF_USE_REMINDERS, DOMAIN
+from custom_components.expiry_tracker.const import (
+    CONF_DEFAULT_URGENT_DAYS,
+    CONF_DEFAULT_WARNING_THRESHOLDS,
+    CONF_USE_REMINDERS,
+    DOMAIN,
+)
 from custom_components.expiry_tracker.manager import ExpiryTrackerManager
 from custom_components.expiry_tracker.websocket_api import async_register_websocket_commands
 
-from .conftest import MemoryStorage
+from .conftest import MemoryStorage, item_data
 
 
-async def setup(hass, hass_ws_client, token=None):
-    manager = ExpiryTrackerManager(MemoryStorage(), lambda: None)
+async def setup(hass, hass_ws_client, token=None, *, options=None, records=None):
+    manager = ExpiryTrackerManager(MemoryStorage(records), lambda: None)
     await manager.async_load()
-    entry = MockConfigEntry(domain=DOMAIN, data={}, options={})
+    entry = MockConfigEntry(domain=DOMAIN, data={}, options=options or {})
     entry.runtime_data = manager
     entry.add_to_hass(hass)
     client = await hass_ws_client(hass, token) if token else await hass_ws_client(hass)
@@ -42,6 +49,59 @@ async def test_admin_crud_renew_ack_and_filters(hass, hass_ws_client):
         {"type": "expiry_tracker/renew", "item_id": item_id, "new_expiry_date": "2037-08-19"}
     )
     assert (await client.receive_json())["result"]["expiry_date"] == "2037-08-19"
+
+
+async def test_create_uses_configured_collection_defaults_when_omitted(hass, hass_ws_client):
+    client = await setup(
+        hass,
+        hass_ws_client,
+        options={
+            CONF_DEFAULT_WARNING_THRESHOLDS: [45, 10],
+            CONF_DEFAULT_URGENT_DAYS: 4,
+        },
+    )
+    await client.send_json_auto_id(
+        {
+            "type": "expiry_tracker/create",
+            "name": "Passport",
+            "expiry_date": "2027-08-19",
+        }
+    )
+    created = await client.receive_json()
+    assert created["success"]
+    assert created["result"]["warning_thresholds"] == [45, 10]
+    assert created["result"]["urgent_days_before"] == 4
+
+
+async def test_search_filters_before_limit_and_can_include_closed(hass, hass_ws_client):
+    records = [
+        {
+            **item_data(name=f"Item {index:03d}", category="Other"),
+            "id": str(uuid4()),
+        }
+        for index in range(500)
+    ]
+    target_id = str(uuid4())
+    records.append(
+        {
+            **item_data(name="Item ZZZ", category="Target", closed=True),
+            "id": target_id,
+        }
+    )
+    client = await setup(hass, hass_ws_client, records=records)
+
+    await client.send_json_auto_id(
+        {
+            "type": "expiry_tracker/list",
+            "search": "item",
+            "category": "Target",
+            "closed": True,
+        }
+    )
+    result = await client.receive_json()
+    assert result["success"]
+    assert result["result"]["pagination"]["total"] == 1
+    assert [item["id"] for item in result["result"]["items"]] == [target_id]
 
 
 async def test_non_admin_reads_but_cannot_mutate(hass, hass_ws_client, hass_read_only_access_token):

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import logging
-from datetime import date, timedelta
+from datetime import date
 from typing import Any
 
 from homeassistant.core import CALLBACK_TYPE, Context, Event, HomeAssistant
 
-from .calculations import AttentionStage, add_months, calculate_state
+from .calculations import AttentionStage, add_months, calculate_state, subtract_days
 from .const import (
     CONF_USE_REMINDERS,
     REMINDERS_DOMAIN,
@@ -94,7 +94,7 @@ class ReminderBackend:
         today = local_today()
         state = calculate_state(item, today)
         dates: dict[str, date] = {
-            f"warning_{days}": item.expiry_date - timedelta(days=days)
+            f"warning_{days}": subtract_days(item.expiry_date, days)
             for days in item.warning_thresholds
         }
         if item.notify_expiry:

@@ -12,7 +12,7 @@ from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.exceptions import HomeAssistantError, Unauthorized
 from homeassistant.helpers import config_validation as cv
 
-from .helpers import decorate, get_manager, local_today, parse_date
+from .helpers import creation_payload, decorate, get_manager, local_today, parse_date
 from .models import ItemNotFoundError, ItemValidationError
 from .schema import CREATE_FIELDS, UPDATE_FIELDS
 
@@ -92,7 +92,11 @@ async def async_register_services(hass: HomeAssistant) -> None:
 
     async def create(call: ServiceCall) -> dict[str, Any]:
         try:
-            return {"item": decorate(await get_manager(hass).async_create_item(call.data))}
+            return {
+                "item": decorate(
+                    await get_manager(hass).async_create_item(creation_payload(hass, call.data))
+                )
+            }
         except ItemValidationError as err:
             _error(err)
 
@@ -151,16 +155,28 @@ async def async_register_services(hass: HomeAssistant) -> None:
         try:
             return {
                 "item": decorate(
-                    await get_manager(hass).async_acknowledge(
-                        call.data["item_id"], call.data["acknowledged"]
-                    )
+                    await get_manager(hass).async_acknowledge(call.data["item_id"], True)
+                )
+            }
+        except (ItemNotFoundError, ValueError) as err:
+            _error(err)
+
+    async def reset_acknowledgement(call: ServiceCall) -> dict[str, Any]:
+        try:
+            return {
+                "item": decorate(
+                    await get_manager(hass).async_acknowledge(call.data["item_id"], False)
                 )
             }
         except (ItemNotFoundError, ValueError) as err:
             _error(err)
 
     async def search(call: ServiceCall) -> dict[str, Any]:
-        rows = get_manager(hass).search(call.data["query"], limit=call.data["limit"])
+        rows = get_manager(hass).search(
+            call.data["query"],
+            limit=call.data["limit"],
+            include_closed=call.data["include_closed"],
+        )
         return {"items": [decorate(item) for item in rows], "count": len(rows)}
 
     hass.services.async_register(
@@ -208,26 +224,19 @@ async def async_register_services(hass: HomeAssistant) -> None:
         schema=vol.Schema({vol.Required("item_id"): cv.string}),
         supports_response=SupportsResponse.OPTIONAL,
     )
-    ack_schema = vol.Schema(
-        {vol.Required("item_id"): cv.string, vol.Optional("acknowledged", default=True): cv.boolean}
-    )
+    acknowledgement_schema = vol.Schema({vol.Required("item_id"): cv.string})
     hass.services.async_register(
         DOMAIN,
         "acknowledge_item",
         _admin_only(hass, acknowledge),
-        schema=ack_schema,
+        schema=acknowledgement_schema,
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
         DOMAIN,
         "reset_acknowledgement",
-        _admin_only(hass, acknowledge),
-        schema=vol.Schema(
-            {
-                vol.Required("item_id"): cv.string,
-                vol.Optional("acknowledged", default=False): cv.boolean,
-            }
-        ),
+        _admin_only(hass, reset_acknowledgement),
+        schema=acknowledgement_schema,
         supports_response=SupportsResponse.OPTIONAL,
     )
     hass.services.async_register(
@@ -240,6 +249,7 @@ async def async_register_services(hass: HomeAssistant) -> None:
                 vol.Optional("limit", default=25): vol.All(
                     vol.Coerce(int), vol.Range(min=1, max=500)
                 ),
+                vol.Optional("include_closed", default=False): cv.boolean,
             }
         ),
         supports_response=SupportsResponse.ONLY,

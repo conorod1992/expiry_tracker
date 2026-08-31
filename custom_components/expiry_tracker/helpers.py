@@ -1,5 +1,6 @@
 """Home Assistant adapter helpers."""
 
+from collections.abc import Mapping
 from datetime import date, datetime
 from typing import Any
 
@@ -9,7 +10,13 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.util import dt as dt_util
 
 from .calculations import calculate_state
-from .const import DOMAIN
+from .const import (
+    CONF_DEFAULT_URGENT_DAYS,
+    CONF_DEFAULT_WARNING_THRESHOLDS,
+    DEFAULT_URGENT_DAYS,
+    DEFAULT_WARNING_THRESHOLDS,
+    DOMAIN,
+)
 from .manager import ExpiryTrackerManager
 from .models import ExpiryItem
 
@@ -23,6 +30,21 @@ def get_entry(hass: HomeAssistant) -> ConfigEntry[ExpiryTrackerManager]:
 
 def get_manager(hass: HomeAssistant) -> ExpiryTrackerManager:
     return get_entry(hass).runtime_data
+
+
+def creation_payload(hass: HomeAssistant, data: Mapping[str, Any]) -> dict[str, Any]:
+    """Apply collection-wide create defaults only when callers omit them."""
+    options = get_entry(hass).options
+    result = dict(data)
+    result.setdefault(
+        "warning_thresholds",
+        options.get(CONF_DEFAULT_WARNING_THRESHOLDS, DEFAULT_WARNING_THRESHOLDS),
+    )
+    result.setdefault(
+        "urgent_days_before",
+        options.get(CONF_DEFAULT_URGENT_DAYS, DEFAULT_URGENT_DAYS),
+    )
+    return result
 
 
 def local_today() -> date:

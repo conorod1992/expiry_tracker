@@ -128,11 +128,17 @@ class ExpiryTrackerManager:
     def list_items(self) -> list[ExpiryItem]:
         return sorted(self._items.values(), key=lambda row: (row.name.casefold(), row.id))
 
-    def search(self, query: str, *, limit: int = 50) -> list[ExpiryItem]:
+    def search(
+        self,
+        query: str,
+        *,
+        limit: int | None = 50,
+        include_closed: bool = False,
+    ) -> list[ExpiryItem]:
         terms = query.casefold().split()
         scored: list[tuple[int, str, ExpiryItem]] = []
         for item in self._items.values():
-            if item.closed:
+            if item.closed and not include_closed:
                 continue
             fields = [item.name, item.category, *item.aliases]
             haystack = " ".join(fields).casefold()
@@ -146,9 +152,10 @@ class ExpiryTrackerManager:
                 else 2
             )
             scored.append((score, item.name.casefold(), item))
-        return [
-            row[2] for row in sorted(scored, key=lambda row: (row[0], row[1], row[2].id))[:limit]
-        ]
+        ordered = sorted(scored, key=lambda row: (row[0], row[1], row[2].id))
+        if limit is not None:
+            ordered = ordered[:limit]
+        return [row[2] for row in ordered]
 
     def query(
         self,
@@ -209,10 +216,12 @@ class ExpiryTrackerManager:
             if old.closed:
                 raise ValueError("closed items cannot be acknowledged")
             selected_stage = AttentionStage(stage) if stage is not None else None
-            if acknowledged and selected_stage is None:
-                selected_stage = calculate_state(old, self._local_date(None)).attention_stage
-            if acknowledged and selected_stage is None:
-                raise ValueError("only an active attention stage can be acknowledged")
+            if acknowledged:
+                current_stage = calculate_state(old, self._local_date(None)).attention_stage
+                if selected_stage is None:
+                    selected_stage = current_stage
+                if selected_stage is None or selected_stage != current_stage:
+                    raise ValueError("only the active attention stage can be acknowledged")
             acknowledged_stage: str | None = None
             if acknowledged:
                 assert selected_stage is not None
