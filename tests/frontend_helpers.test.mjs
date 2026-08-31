@@ -9,6 +9,7 @@ import {
   formatActionableDate,
   formatDate,
   groupItems,
+  isPassiveItem,
   normalizeReminderThresholds,
   parseLocalDate,
   recurrenceLabel,
@@ -57,19 +58,27 @@ test("arbitrary reminder thresholds are preserved, deduplicated, and validated",
   assert.throws(() => normalizeReminderThresholds([2.5]), /whole numbers/);
 });
 
-test("task groups separate acknowledged items that are still outstanding", () => {
-  const attention = { id: "a", enabled: true, acknowledged: false, requires_attention: true, status: "actionable", important: false, days_until_expiry: 20 };
-  const urgentAttention = { id: "h", enabled: true, acknowledged: false, requires_attention: false, status: "urgent", important: false, days_until_expiry: 3 };
-  const expiredAttention = { id: "i", enabled: true, acknowledged: false, requires_attention: false, status: "expired", important: false, days_until_expiry: -3 };
-  const acknowledgedActionable = { id: "b", enabled: true, acknowledged: true, requires_attention: false, status: "actionable", important: false, days_until_expiry: 20 };
-  const acknowledgedUrgent = { id: "c", enabled: true, acknowledged: true, requires_attention: false, status: "urgent", important: false, days_until_expiry: 3 };
-  const acknowledgedExpired = { id: "d", enabled: true, acknowledged: true, requires_attention: false, status: "expired", important: false, days_until_expiry: -3 };
-  const warning = { id: "e", enabled: true, acknowledged: false, requires_attention: false, status: "warning", important: false, days_until_expiry: 100 };
-  const later = { id: "f", enabled: true, acknowledged: false, requires_attention: false, status: "valid", important: false, days_until_expiry: 400 };
-  const disabled = { id: "g", enabled: false, acknowledged: true, requires_attention: false, status: "expired", important: true, days_until_expiry: -3 };
-  const grouped = groupItems([later, warning, acknowledgedExpired, attention, urgentAttention, expiredAttention, disabled, acknowledgedUrgent, acknowledgedActionable]);
+test("passive items are identified only when explicitly configured", () => {
+  assert.equal(isPassiveItem({ requires_action: false }), true);
+  assert.equal(isPassiveItem({ requires_action: true }), false);
+  assert.equal(isPassiveItem({}), false);
+});
+
+test("task groups separate attention, dismissed, and passive expired items", () => {
+  const attention = { id: "a", enabled: true, acknowledged: false, requires_attention: true, requires_action: true, status: "actionable", important: false, days_until_expiry: 20 };
+  const urgentAttention = { id: "h", enabled: true, acknowledged: false, requires_attention: true, requires_action: true, status: "urgent", important: false, days_until_expiry: 3 };
+  const expiredAttention = { id: "i", enabled: true, acknowledged: false, requires_attention: true, requires_action: true, status: "expired", important: false, days_until_expiry: -3 };
+  const passiveExpired = { id: "p", enabled: true, acknowledged: false, requires_attention: false, requires_action: false, status: "expired", important: false, days_until_expiry: -3 };
+  const acknowledgedActionable = { id: "b", enabled: true, acknowledged: true, requires_attention: false, requires_action: true, status: "actionable", important: false, days_until_expiry: 20 };
+  const acknowledgedUrgent = { id: "c", enabled: true, acknowledged: true, requires_attention: false, requires_action: true, status: "urgent", important: false, days_until_expiry: 3 };
+  const acknowledgedExpired = { id: "d", enabled: true, acknowledged: true, requires_attention: false, requires_action: true, status: "expired", important: false, days_until_expiry: -3 };
+  const warning = { id: "e", enabled: true, acknowledged: false, requires_attention: false, requires_action: true, status: "warning", important: false, days_until_expiry: 100 };
+  const later = { id: "f", enabled: true, acknowledged: false, requires_attention: false, requires_action: true, status: "valid", important: false, days_until_expiry: 400 };
+  const disabled = { id: "g", enabled: false, acknowledged: true, requires_attention: false, requires_action: true, status: "expired", important: true, days_until_expiry: -3 };
+  const grouped = groupItems([later, warning, acknowledgedExpired, attention, urgentAttention, expiredAttention, passiveExpired, disabled, acknowledgedUrgent, acknowledgedActionable]);
   assert.deepEqual(grouped.attention.map((item) => item.id), ["a", "h", "i"]);
   assert.deepEqual(grouped.acknowledged.map((item) => item.id), ["d", "c", "b"]);
+  assert.deepEqual(grouped.informational.map((item) => item.id), ["p"]);
   assert.deepEqual(grouped.comingUp.map((item) => item.id), ["e"]);
   assert.deepEqual(grouped.later.map((item) => item.id), ["f", "g"]);
 });
