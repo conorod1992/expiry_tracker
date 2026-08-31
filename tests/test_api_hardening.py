@@ -21,9 +21,7 @@ from .conftest import MemoryStorage, item_data
 
 def test_date_fields_reject_datetime_subclasses():
     with pytest.raises(ItemValidationError, match="expiry_date must be an ISO date"):
-        ExpiryItem.create(
-            item_data(expiry_date=datetime(2027, 8, 19, 12, 0, tzinfo=UTC))
-        )
+        ExpiryItem.create(item_data(expiry_date=datetime(2027, 8, 19, 12, 0, tzinfo=UTC)))
 
 
 def test_large_offsets_clamp_at_date_minimum():
@@ -121,9 +119,7 @@ async def test_services_apply_configured_defaults_and_have_fixed_ack_actions(has
 
     service_map = hass.services.async_services()[DOMAIN]
     with pytest.raises(vol.Invalid):
-        service_map["reset_acknowledgement"].schema(
-            {"item_id": item_id, "acknowledged": True}
-        )
+        service_map["reset_acknowledgement"].schema({"item_id": item_id, "acknowledged": True})
 
 
 def test_reminders_milestones_tolerate_early_dates(monkeypatch):
@@ -135,9 +131,7 @@ def test_reminders_milestones_tolerate_early_dates(monkeypatch):
             warning_thresholds=[36500],
         )
     )
-    monkeypatch.setattr(
-        "custom_components.expiry_tracker.reminders.local_today", lambda: date.min
-    )
+    monkeypatch.setattr("custom_components.expiry_tracker.reminders.local_today", lambda: date.min)
     backend = ReminderBackend(SimpleNamespace(), manager, "owner")
 
     milestones = backend._milestones(item)
