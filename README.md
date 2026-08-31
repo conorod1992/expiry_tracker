@@ -26,7 +26,7 @@ Everything is stored locally in Home Assistant. Expiry Tracker does not require 
 - Warning, actionable, urgent and expiry dates
 - Clear **Needs your attention**, **Coming up** and **Later** sections
 - Search, filtering and sorting
-- Renewal history
+- Completion and renewal history
 - Optional Home Assistant notifications
 - Optional repeating reminders until you dismiss them
 - Home Assistant sensors and calendar
@@ -199,18 +199,22 @@ Contains items which are actionable, urgent or expired and currently need attent
 
 These items provide quick actions such as:
 
-- **Mark as renewed**
+- The configured completion action, such as **Mark as renewed** or **Mark as checked**
 - **Dismiss reminder**
 
 ## Dismissed — still outstanding
 
-Dismissing a reminder does **not** mark the item as renewed.
+Dismissing a reminder does **not** complete the underlying task.
 
 It simply tells Expiry Tracker that you do not want to be reminded about that particular stage again.
 
 The item remains visible here because the underlying expiry is still outstanding.
 
 If it later reaches another stage—for example, moving from **Ready to deal with** to **Urgent**—it can ask for your attention again.
+
+## Expired — no action needed
+
+Items configured for informational tracking only can expire without becoming work you need to complete. They are kept in a separate informational section and do not create an attention reminder to dismiss.
 
 ## Coming up
 
@@ -223,6 +227,12 @@ High-priority items may also appear here.
 Contains items which are further away, together with disabled items.
 
 This keeps them available without allowing distant dates to dominate the main view.
+
+## Archived items
+
+Archived items keep their history but no longer take part in active reminders, sensors, calendar entries or expiry views.
+
+An archived item can be reopened later without recreating it or losing its history.
 
 ---
 
@@ -254,22 +264,19 @@ You can create one or more advance warning points.
 
 Common values are available as presets, or you can enter your own number of days.
 
-## Renewal
+With built-in notifications, **Repeat until dismissed** can keep repeating the current actionable, urgent or expiry reminder until you dismiss that stage. When the optional Reminders integration handles delivery, snoozing, dismissal and escalation are managed there instead.
 
-If an item normally renews for a predictable period, you can configure that period so Expiry Tracker can suggest the next expiry date when you renew it.
+## Action & repeat
 
-The date is **never changed automatically**.
+Choose what completing the real-world task means for the item. Expiry Tracker supports common actions such as renew, replace, review, re-test, re-register and check, plus custom wording.
 
-Selecting **Mark as renewed** opens a confirmation window showing:
+For actions that continue tracking the item, you can configure a typical repeat period so Expiry Tracker can suggest the next expiry date after completion. The date is **never changed automatically**.
 
-- The previous expiry date
-- The suggested new expiry date, if available
-
-You can change the suggested date before confirming it.
+For **Cancel / end**, completing the task archives the item while retaining its history instead of asking for another expiry date.
 
 ## Advanced
 
-Less commonly needed options are kept here, including lower-level identifiers and optional per-item Home Assistant sensors.
+Less commonly needed options are kept here, including search aliases, the optional per-item Home Assistant sensor and whether the item is active.
 
 ---
 
@@ -323,7 +330,7 @@ Example:
 
 ---
 
-# Dismissing and renewing
+# Dismissing and completing
 
 These actions deliberately mean different things.
 
@@ -333,22 +340,24 @@ Use this when:
 
 > “I know about this. Stop reminding me about this stage for now.”
 
-The expiry date is unchanged and the item is **not** recorded as renewed.
+The expiry date is unchanged and the real-world task is **not** recorded as complete.
 
 Dismissal applies only to the current stage.
 
 For example, dismissing the actionable reminder does not prevent the item from becoming urgent later.
 
-### Mark as renewed
+### Complete the configured action
 
-Use this when the item has actually been renewed or replaced.
+Use the completion action only when the real-world task has actually been completed—for example, when an item has been renewed, replaced, reviewed or checked.
 
-Expiry Tracker will:
+For actions that continue tracking the item, Expiry Tracker will:
 
-- Record the old expiry in the item's history
-- Ask you to confirm the new expiry date
+- Record the previous expiry in the item's history
+- Ask you to confirm the next expiry date
 - Reset its reminder/dismissal state
 - Begin tracking the new expiry
+
+A **Cancel / end** action archives the item instead of asking for a new expiry date.
 
 ---
 
@@ -393,10 +402,10 @@ This is entirely optional. You do **not** need Reminders to use Expiry Tracker.
 When the integration is available:
 
 - Warning milestones are treated as informational reminders.
-- Actionable, urgent and expired items remain outstanding until dismissed or renewed.
-- A **Renewed** action can take you back to Expiry Tracker to confirm the new expiry date.
+- Enabled actionable, urgent and expiry milestones remain outstanding until dismissed or the underlying task is completed.
+- A completion action can take you back to Expiry Tracker to confirm the next expiry date when one is required.
 
-Selecting **Renewed** from a Home Assistant notification does not silently change the expiry date. Expiry Tracker still asks you to confirm or edit the new date first.
+Selecting a completion action from a Home Assistant notification does not silently change the expiry date. Expiry Tracker still asks you to confirm or edit the new date first when the item continues tracking.
 
 ---
 
@@ -445,9 +454,13 @@ expiry_tracker.create_item
 expiry_tracker.update_item
 expiry_tracker.delete_item
 expiry_tracker.renew_item
+expiry_tracker.close_item
+expiry_tracker.reopen_item
 expiry_tracker.acknowledge_item
 expiry_tracker.reset_acknowledgement
 ```
+
+`close_item` archives an item without deleting its history. `reopen_item` returns it to active tracking.
 
 It also provides actions which return information:
 
@@ -539,8 +552,10 @@ Diagnostics deliberately exclude personal item details such as:
 - Expiry dates
 - Notes
 - History
+- Custom category names
+- Notification service and target identifiers
 
-Diagnostics contain only general information such as counts, categories, integration version and collection-wide options.
+Diagnostics contain aggregate counts, counts for the built-in categories, integration/storage versions and non-sensitive collection-wide options. Notification identifiers are redacted, and custom categories are reported only as anonymous counts.
 
 History is limited to 50 entries per item.
 
@@ -584,9 +599,9 @@ You can test the notification service separately from **Developer tools → Acti
 
 This is intentional.
 
-**Dismiss reminder** means that the current reminder stage has been acknowledged. It does not mean that the item has been renewed.
+**Dismiss reminder** means that the current reminder stage has been acknowledged. It does not mean that the underlying task has been completed.
 
-The item remains outstanding until you use **Mark as renewed** or otherwise change it.
+The item remains outstanding until you complete its configured action, archive it or otherwise change it.
 
 ---
 
