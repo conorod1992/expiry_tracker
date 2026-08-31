@@ -31,9 +31,7 @@ def _diagnostic_counts(manager: ExpiryTrackerManager) -> dict[str, Any]:
     category_counts = counts.pop("category_counts", {})
     built_in = set(BUILT_IN_CATEGORIES)
     custom = {
-        category: count
-        for category, count in category_counts.items()
-        if category not in built_in
+        category: count for category, count in category_counts.items() if category not in built_in
     }
     counts["category_counts"] = {
         category: category_counts[category]
