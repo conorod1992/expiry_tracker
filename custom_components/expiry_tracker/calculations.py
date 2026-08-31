@@ -28,6 +28,12 @@ class AttentionStage(StrEnum):
     EXPIRY = "expiry"
 
 
+def subtract_days(value: date, days: int) -> date:
+    """Subtract days while clamping dates that would underflow the calendar."""
+    available = value.toordinal() - date.min.toordinal()
+    return date.min if days > available else value - timedelta(days=days)
+
+
 def subtract_months(value: date, months: int) -> date:
     """Subtract calendar months, clamping to the destination month's last day."""
     absolute = value.year * 12 + value.month - 1 - months
@@ -89,10 +95,10 @@ def calculate_state(item: ExpiryItem, today: date) -> ExpiryState:
     elif item.actionable_offset_unit == "months":
         actionable_date = subtract_months(expiry, item.actionable_offset_value)
     else:
-        actionable_date = expiry - timedelta(days=item.actionable_offset_value)
+        actionable_date = subtract_days(expiry, item.actionable_offset_value)
     thresholds = item.warning_thresholds
-    warning_date = expiry - timedelta(days=max(thresholds)) if thresholds else None
-    urgent_date = expiry - timedelta(days=item.urgent_days_before)
+    warning_date = subtract_days(expiry, max(thresholds)) if thresholds else None
+    urgent_date = subtract_days(expiry, item.urgent_days_before)
     if today > expiry:
         status = ExpiryStatus.EXPIRED
     elif item.requires_action and today >= urgent_date:
