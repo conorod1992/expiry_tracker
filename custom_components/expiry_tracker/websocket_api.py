@@ -11,13 +11,30 @@ from homeassistant.components import websocket_api
 from homeassistant.components.websocket_api import ActiveConnection
 from homeassistant.core import HomeAssistant, callback
 
-from .const import BUILT_IN_CATEGORIES, CONF_USE_REMINDERS, MAX_LIST_LIMIT
+from .const import (
+    BUILT_IN_CATEGORIES,
+    CONF_DEFAULT_URGENT_DAYS,
+    CONF_DEFAULT_WARNING_THRESHOLDS,
+    CONF_USE_REMINDERS,
+    MAX_LIST_LIMIT,
+)
 from .helpers import creation_payload, decorate, get_entry, get_manager, local_today
 from .models import ItemNotFoundError, ItemValidationError
 from .reminders import reminders_available
 from .schema import CREATE_FIELDS, UPDATE_FIELDS
 
 _UPDATE_KEYS = {str(key.schema) for key in UPDATE_FIELDS}
+_PANEL_OPTION_KEYS = (
+    CONF_DEFAULT_WARNING_THRESHOLDS,
+    CONF_DEFAULT_URGENT_DAYS,
+    CONF_USE_REMINDERS,
+)
+
+
+def _panel_options(hass: HomeAssistant) -> dict[str, Any]:
+    """Return only options required by the non-admin management panel."""
+    options = get_entry(hass).options
+    return {key: options[key] for key in _PANEL_OPTION_KEYS if key in options}
 
 
 def _send_error(connection: ActiveConnection, msg_id: int, err: Exception) -> None:
@@ -232,7 +249,7 @@ def websocket_settings(
         msg["id"],
         {
             "categories": list(BUILT_IN_CATEGORIES),
-            "options": dict(get_entry(hass).options),
+            "options": _panel_options(hass),
             "is_admin": bool(connection.user and connection.user.is_admin),
             "capabilities": {
                 "llm_read": True,
