@@ -2,6 +2,7 @@ from datetime import UTC, date, datetime
 from types import SimpleNamespace
 
 import pytest
+import voluptuous as vol
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.expiry_tracker.calculations import calculate_state
@@ -119,7 +120,7 @@ async def test_services_apply_configured_defaults_and_have_fixed_ack_actions(has
     assert reset["item"]["acknowledged"] is False
 
     service_map = hass.services.async_services()[DOMAIN]
-    with pytest.raises(Exception):
+    with pytest.raises(vol.Invalid):
         service_map["reset_acknowledgement"].schema(
             {"item_id": item_id, "acknowledged": True}
         )
