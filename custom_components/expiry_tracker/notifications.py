@@ -8,7 +8,7 @@ from datetime import UTC, datetime, timedelta
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.helpers.event import async_track_time_interval
 
-from .calculations import ExpiryStatus, calculate_state
+from .calculations import AttentionStage, ExpiryStatus, calculate_state
 from .const import CONF_NOTIFICATION_SERVICE, CONF_NOTIFICATION_TARGET
 from .helpers import get_manager, local_today
 from .models import ExpiryItem
@@ -26,6 +26,17 @@ def _notification_timestamp(value: str | None) -> datetime | None:
     except ValueError:
         return None
     return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
+
+
+def _stage_notifications_enabled(item: ExpiryItem, stage: AttentionStage | None) -> bool:
+    """Return whether delivery is enabled for the current attention stage."""
+    if stage is AttentionStage.ACTIONABLE:
+        return item.notify_actionable
+    if stage is AttentionStage.URGENT:
+        return item.notify_urgent
+    if stage is AttentionStage.EXPIRY:
+        return item.notify_expiry
+    return False
 
 
 def _current_event(item: ExpiryItem, status: ExpiryStatus, days: int) -> str | None:
@@ -70,7 +81,12 @@ async def async_process_notifications(hass: HomeAssistant) -> None:
 
         if current_event and current_event not in last_notifications:
             events.append(current_event)
-        elif item.repeat_until_acknowledged and state.requires_attention:
+        elif (
+            item.require_acknowledgement
+            and item.repeat_until_acknowledged
+            and state.requires_attention
+            and _stage_notifications_enabled(item, state.attention_stage)
+        ):
             previous_repeat = _notification_timestamp(last_notifications.get("attention_repeat"))
             stage_key = state.attention_stage.value if state.attention_stage else None
             previous_stage = _notification_timestamp(
