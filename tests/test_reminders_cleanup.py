@@ -121,15 +121,14 @@ async def test_cleanup_removes_all_source_owned_reminders(monkeypatch):
 
     adapter._call = call  # type: ignore[method-assign]
 
-    await async_cleanup_reminders(hass)
-
+    assert await async_cleanup_reminders(hass)
     assert set(deleted) == {"1", "2"}
     assert hass.data["expiry_tracker_reminders_active"] is False
     assert "expiry_tracker_reminders_backend" not in hass.data
     assert manager._change_listener is None
 
 
-async def test_config_entry_unload_runs_reminders_cleanup(monkeypatch):
+async def test_reload_detaches_backend_without_deleting_remote_reminders(monkeypatch):
     calls: list[str] = []
 
     class ConfigEntries:
@@ -137,8 +136,9 @@ async def test_config_entry_unload_runs_reminders_cleanup(monkeypatch):
             calls.append("platforms")
             return True
 
-    async def cleanup(hass):
-        calls.append("cleanup")
+    async def cleanup(hass, *, remove_remote=True):
+        calls.append(f"cleanup:{remove_remote}")
+        return True
 
     monkeypatch.setattr(expiry_tracker, "async_cleanup_reminders", cleanup)
     monkeypatch.setattr(
@@ -152,7 +152,61 @@ async def test_config_entry_unload_runs_reminders_cleanup(monkeypatch):
         lambda hass: calls.append("services"),
     )
     hass = SimpleNamespace(config_entries=ConfigEntries(), data={})
-    entry = SimpleNamespace()
+    entry = SimpleNamespace(disabled_by=None)
 
     assert await expiry_tracker.async_unload_entry(hass, entry)
-    assert calls == ["platforms", "cleanup", "panel", "services"]
+    assert calls == ["platforms", "cleanup:False", "panel", "services"]
+
+
+async def test_disabled_entry_unload_removes_remote_reminders(monkeypatch):
+    calls: list[str] = []
+
+    class ConfigEntries:
+        async def async_unload_platforms(self, entry, platforms):
+            return True
+
+    async def cleanup(hass, *, remove_remote=True):
+        calls.append(f"cleanup:{remove_remote}")
+        return True
+
+    monkeypatch.setattr(expiry_tracker, "async_cleanup_reminders", cleanup)
+    monkeypatch.setattr(expiry_tracker.frontend, "async_remove_panel", lambda *args, **kwargs: None)
+    monkeypatch.setattr(expiry_tracker, "async_unregister_services", lambda hass: None)
+    hass = SimpleNamespace(config_entries=ConfigEntries(), data={})
+    entry = SimpleNamespace(disabled_by="user")
+
+    assert await expiry_tracker.async_unload_entry(hass, entry)
+    assert calls == ["cleanup:True"]
+
+
+async def test_switching_reminders_off_cleans_before_reload(monkeypatch):
+    calls: list[str] = []
+
+    class ConfigEntries:
+        async def async_reload(self, entry_id):
+            calls.append(f"reload:{entry_id}")
+
+    async def cleanup(hass, *, remove_remote=True):
+        calls.append(f"cleanup:{remove_remote}")
+        return True
+
+    monkeypatch.setattr(expiry_tracker, "async_cleanup_reminders", cleanup)
+    hass = SimpleNamespace(config_entries=ConfigEntries(), data={})
+    entry = SimpleNamespace(entry_id="entry-1", options={"use_reminders": False})
+
+    await expiry_tracker._options_updated(hass, entry)
+    assert calls == ["cleanup:True", "reload:entry-1"]
+
+
+async def test_entry_removal_retries_remote_cleanup(monkeypatch):
+    calls: list[str] = []
+
+    async def cleanup(hass, *, remove_remote=True):
+        calls.append(f"cleanup:{remove_remote}")
+        return True
+
+    monkeypatch.setattr(expiry_tracker, "async_cleanup_reminders", cleanup)
+    hass = SimpleNamespace(data={})
+
+    await expiry_tracker.async_remove_entry(hass, SimpleNamespace())
+    assert calls == ["cleanup:True"]
