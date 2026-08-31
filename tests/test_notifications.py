@@ -154,6 +154,7 @@ async def test_malformed_notification_timestamp_does_not_break_repeats(monkeypat
         item_data(
             actionable_mode="immediate",
             urgent_days_before=0,
+            require_acknowledgement=True,
             repeat_until_acknowledged=True,
             last_notifications={"actionable": "not-a-timestamp"},
         )
@@ -170,3 +171,55 @@ async def test_malformed_notification_timestamp_does_not_break_repeats(monkeypat
 
     assert len(hass.services.calls) == 1
     assert "attention_repeat" in (manager.get_item(item.id).last_notifications or {})
+
+
+async def test_hidden_repeat_does_not_bypass_require_dismissal(monkeypatch):
+    manager = ExpiryTrackerManager(MemoryStorage(), lambda: None)
+    await manager.async_load()
+    await manager.async_create_item(
+        item_data(
+            actionable_mode="immediate",
+            urgent_days_before=0,
+            require_acknowledgement=False,
+            repeat_until_acknowledged=True,
+            last_notifications={"actionable": "2026-08-20T00:00:00Z"},
+        )
+    )
+    hass = hass_for(manager)
+    monkeypatch.setattr(
+        "custom_components.expiry_tracker.notifications.local_today", lambda: date(2026, 8, 24)
+    )
+    monkeypatch.setattr(
+        "custom_components.expiry_tracker.notifications.get_manager", lambda _hass: manager
+    )
+
+    await async_process_notifications(hass)
+
+    assert hass.services.calls == []
+
+
+async def test_repeat_respects_current_stage_notification_toggle(monkeypatch):
+    manager = ExpiryTrackerManager(MemoryStorage(), lambda: None)
+    await manager.async_load()
+    await manager.async_create_item(
+        item_data(
+            expiry_date="2026-09-30",
+            actionable_mode="immediate",
+            urgent_days_before=7,
+            notify_actionable=False,
+            require_acknowledgement=True,
+            repeat_until_acknowledged=True,
+            last_notifications={"actionable": "2026-08-20T00:00:00Z"},
+        )
+    )
+    hass = hass_for(manager)
+    monkeypatch.setattr(
+        "custom_components.expiry_tracker.notifications.local_today", lambda: date(2026, 8, 24)
+    )
+    monkeypatch.setattr(
+        "custom_components.expiry_tracker.notifications.get_manager", lambda _hass: manager
+    )
+
+    await async_process_notifications(hass)
+
+    assert hass.services.calls == []
