@@ -1,6 +1,7 @@
 {
   "domain": "expiry_tracker",
   "name": "Expiry Tracker",
+  "after_dependencies": ["reminders"],
   "codeowners": ["@conorod1992"],
   "config_flow": true,
   "dependencies": ["frontend", "http", "websocket_api"],

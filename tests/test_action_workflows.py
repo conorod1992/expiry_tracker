@@ -50,7 +50,9 @@ async def test_reminders_use_configured_completion_wording(monkeypatch):
     monkeypatch.setattr(
         "custom_components.expiry_tracker.reminders.local_today", lambda: date(2026, 8, 24)
     )
-    adapter = ReminderBackend(SimpleNamespace(services=Services(), bus=Bus()), manager)
+    adapter = ReminderBackend(
+        SimpleNamespace(services=Services(), bus=Bus(), data={}), manager, "owner-user"
+    )
     item = await manager.async_create_item(
         item_data(actionable_mode="immediate", action_type="review")
     )
@@ -65,7 +67,9 @@ async def test_cancel_completion_closes_item(monkeypatch):
     monkeypatch.setattr(
         "custom_components.expiry_tracker.reminders.local_today", lambda: date(2026, 8, 24)
     )
-    adapter = ReminderBackend(SimpleNamespace(services=Services(), bus=Bus()), manager)
+    hass = SimpleNamespace(services=Services(), bus=Bus(), data={})
+    adapter = ReminderBackend(hass, manager, "owner-user")
+    hass.data["expiry_tracker_reminders_active"] = True
     item = await manager.async_create_item(
         item_data(actionable_mode="immediate", action_type="cancel")
     )

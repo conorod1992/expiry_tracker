@@ -17,9 +17,11 @@ from .conftest import MemoryStorage, item_data
 
 
 class Services:
-    def __init__(self, available=True, missing=()):
+    def __init__(self, available=True, missing=(), fail_list=False):
         self.available = available
         self.missing = set(missing)
+        self.fail_list = fail_list
+        self.calls = []
 
     def has_service(self, domain, service):
         return (
@@ -30,12 +32,46 @@ class Services:
         )
 
     async def async_call(self, domain, service, data, **kwargs):
+        self.calls.append((domain, service, data, kwargs))
         self.last_call = (domain, service, data, kwargs)
+        if self.fail_list and domain == "reminders" and service == "list":
+            raise RuntimeError("owner access rejected")
+        if domain == "reminders" and service == "list":
+            return {"reminders": []}
+        return None
 
 
 class Bus:
     def async_fire(self, event_type, data):
         self.last_event = (event_type, data)
+
+    def async_listen(self, event_type, listener):
+        self.listener = (event_type, listener)
+        return lambda: None
+
+
+class Auth:
+    def __init__(self, users=None):
+        self.users = users or [
+            SimpleNamespace(
+                id="owner-user",
+                is_owner=True,
+                is_active=True,
+                system_generated=False,
+            )
+        ]
+
+    async def async_get_users(self):
+        return self.users
+
+
+def hass_for(*, services=None, users=None):
+    return SimpleNamespace(
+        services=services or Services(),
+        bus=Bus(),
+        auth=Auth(users),
+        data={},
+    )
 
 
 def test_capability_requires_all_public_services():
@@ -47,8 +83,55 @@ def test_capability_requires_all_public_services():
 async def test_missing_external_action_keeps_native_notifications_active():
     manager = ExpiryTrackerManager(MemoryStorage(), lambda: None)
     await manager.async_load()
-    hass = SimpleNamespace(services=Services(missing={"external_action"}), data={})
+    hass = hass_for(services=Services(missing={"external_action"}))
     entry = SimpleNamespace(options={CONF_USE_REMINDERS: True})
+    assert await async_setup_reminders(hass, entry, manager) is None
+    assert hass.data["expiry_tracker_reminders_active"] is False
+
+
+async def test_setup_uses_home_assistant_owner_context_before_activating():
+    manager = ExpiryTrackerManager(MemoryStorage(), lambda: None)
+    await manager.async_load()
+    await manager.async_create_item(item_data(expiry_date="2026-10-01"))
+    services = Services()
+    hass = hass_for(services=services)
+    entry = SimpleNamespace(options={CONF_USE_REMINDERS: True})
+
+    unsubscribe = await async_setup_reminders(hass, entry, manager)
+
+    assert unsubscribe is not None
+    assert hass.data["expiry_tracker_reminders_active"] is True
+    reminder_calls = [call for call in services.calls if call[0] == "reminders"]
+    assert reminder_calls
+    assert all(call[3]["context"].user_id == "owner-user" for call in reminder_calls)
+    assert manager._change_listener is not None
+
+
+async def test_failed_initial_owner_reconciliation_falls_back_to_native():
+    manager = ExpiryTrackerManager(MemoryStorage(), lambda: None)
+    await manager.async_load()
+    hass = hass_for(services=Services(fail_list=True))
+    entry = SimpleNamespace(options={CONF_USE_REMINDERS: True})
+
+    assert await async_setup_reminders(hass, entry, manager) is None
+    assert hass.data["expiry_tracker_reminders_active"] is False
+    assert manager._change_listener is None
+
+
+async def test_missing_active_owner_falls_back_to_native():
+    manager = ExpiryTrackerManager(MemoryStorage(), lambda: None)
+    await manager.async_load()
+    users = [
+        SimpleNamespace(
+            id="inactive-owner",
+            is_owner=True,
+            is_active=False,
+            system_generated=False,
+        )
+    ]
+    hass = hass_for(users=users)
+    entry = SimpleNamespace(options={CONF_USE_REMINDERS: True})
+
     assert await async_setup_reminders(hass, entry, manager) is None
     assert hass.data["expiry_tracker_reminders_active"] is False
 
@@ -60,7 +143,7 @@ async def backend(monkeypatch):
     monkeypatch.setattr(
         "custom_components.expiry_tracker.reminders.local_today", lambda: date(2026, 8, 24)
     )
-    return ReminderBackend(SimpleNamespace(services=Services(), bus=Bus()), manager), manager
+    return ReminderBackend(hass_for(), manager, "owner-user"), manager
 
 
 async def test_milestones_have_stable_source_identity_and_do_not_replay_past_warnings(backend):
@@ -78,6 +161,18 @@ async def test_milestones_have_stable_source_identity_and_do_not_replay_past_war
     assert milestones["warning_7"]["external_actions"] == []
     assert milestones["actionable"]["external_actions"] == [{"id": "renewed", "label": "Renewed"}]
     assert milestones["actionable"]["allow_manual_completion"] is False
+
+
+async def test_custom_completion_label_respects_reminders_external_action_limit(backend):
+    adapter, manager = backend
+    label = "x" * 80
+    item = await manager.async_create_item(
+        item_data(actionable_mode="immediate", action_type="custom", custom_action_label=label)
+    )
+
+    external_label = adapter._milestones(item)["actionable"]["external_actions"][0]["label"]
+
+    assert external_label == "x" * 64
 
 
 async def test_expiry_day_uses_expiry_attention_stage(backend, monkeypatch):
@@ -103,6 +198,7 @@ async def test_current_attention_stage_is_reconciled_without_replaying_warnings(
 
 async def test_dismiss_lifecycle_acknowledges_only_matching_stage(backend):
     adapter, manager = backend
+    adapter.hass.data["expiry_tracker_reminders_active"] = True
     item = await manager.async_create_item(item_data(actionable_mode="immediate"))
     await adapter.async_lifecycle(
         SimpleNamespace(
@@ -139,8 +235,27 @@ async def test_dismiss_lifecycle_acknowledges_only_matching_stage(backend):
     assert manager.get_item(item.id).acknowledged_stage == "actionable"
 
 
+async def test_inactive_backend_ignores_stale_lifecycle_events(backend):
+    adapter, manager = backend
+    item = await manager.async_create_item(item_data(actionable_mode="immediate"))
+
+    await adapter.async_lifecycle(
+        SimpleNamespace(
+            data={
+                "source": "expiry_tracker",
+                "action": "acknowledged",
+                "source_id": item.id,
+                "source_event": "actionable",
+            }
+        )
+    )
+
+    assert not manager.get_item(item.id).acknowledged
+
+
 async def test_external_renewed_requests_confirmation_without_renewing(backend):
     adapter, manager = backend
+    adapter.hass.data["expiry_tracker_reminders_active"] = True
     item = await manager.async_create_item(
         item_data(actionable_mode="immediate", recurrence_months=12)
     )
@@ -162,6 +277,7 @@ async def test_external_renewed_requests_confirmation_without_renewing(backend):
 
 async def test_generic_completion_cannot_renew(backend):
     adapter, manager = backend
+    adapter.hass.data["expiry_tracker_reminders_active"] = True
     item = await manager.async_create_item(item_data(actionable_mode="immediate"))
     for action in ("manually_completed", "automatically_completed"):
         await adapter.async_lifecycle(

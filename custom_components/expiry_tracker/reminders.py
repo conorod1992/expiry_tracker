@@ -6,7 +6,7 @@ import logging
 from datetime import date, timedelta
 from typing import Any
 
-from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, Context, Event, HomeAssistant
 
 from .calculations import AttentionStage, add_months, calculate_state
 from .const import (
@@ -31,12 +31,15 @@ _COMPLETED_LABELS = {
     "cancel": "Cancelled",
     "check": "Checked",
 }
+_MAX_EXTERNAL_ACTION_LABEL = 64
 
 
 def _completion_label(item: ExpiryItem) -> str:
     if item.action_type == "custom":
-        return item.custom_action_label or "Completed"
-    return _COMPLETED_LABELS.get(item.action_type, "Renewed")
+        label = item.custom_action_label or "Completed"
+    else:
+        label = _COMPLETED_LABELS.get(item.action_type, "Renewed")
+    return label[:_MAX_EXTERNAL_ACTION_LABEL].rstrip()
 
 
 def _completion_action(item: ExpiryItem) -> dict[str, str]:
@@ -48,12 +51,29 @@ def reminders_available(hass: HomeAssistant) -> bool:
     return all(hass.services.has_service(REMINDERS_DOMAIN, service) for service in _SERVICES)
 
 
+async def _owner_user_id(hass: HomeAssistant) -> str | None:
+    """Resolve the single active Home Assistant owner for Reminders ownership."""
+    users = await hass.auth.async_get_users()
+    owners = [
+        user.id for user in users if user.is_owner and user.is_active and not user.system_generated
+    ]
+    if len(owners) != 1:
+        _LOGGER.warning(
+            "Could not resolve exactly one active Home Assistant owner for Expiry Tracker Reminders"
+        )
+        return None
+    return owners[0]
+
+
 class ReminderBackend:
     """Reconciles one-time, source-owned milestone reminders."""
 
-    def __init__(self, hass: HomeAssistant, manager: ExpiryTrackerManager) -> None:
+    def __init__(
+        self, hass: HomeAssistant, manager: ExpiryTrackerManager, owner_user_id: str
+    ) -> None:
         self.hass = hass
         self.manager = manager
+        self.owner_user_id = owner_user_id
 
     def _milestones(self, item: ExpiryItem) -> dict[str, dict[str, Any]]:
         if not item.enabled or item.closed:
@@ -96,15 +116,26 @@ class ReminderBackend:
                 external_actions = [_completion_action(item)]
             elif event == "urgent":
                 acknowledgement_policy = "required"
-                escalation = {"initial_delay_minutes": 60, "repeat_minutes": 240, "max_attempts": 3}
+                escalation = {
+                    "initial_delay_minutes": 60,
+                    "repeat_minutes": 240,
+                    "max_attempts": 3,
+                }
                 external_actions = [_completion_action(item)]
             else:
                 acknowledgement_policy = "required"
-                escalation = {"initial_delay_minutes": 30, "repeat_minutes": 120, "max_attempts": 5}
+                escalation = {
+                    "initial_delay_minutes": 30,
+                    "repeat_minutes": 120,
+                    "max_attempts": 5,
+                }
                 external_actions = [_completion_action(item)]
             result[event] = {
                 "title": f"Expiry Tracker: {item.name}",
-                "message": f"{item.name}: {event.replace('_', ' ')}. Expires {item.expiry_date.isoformat()}.",
+                "message": (
+                    f"{item.name}: {event.replace('_', ' ')}. "
+                    f"Expires {item.expiry_date.isoformat()}."
+                ),
                 "due": f"{scheduled_date.isoformat()} 09:00:00",
                 "acknowledgement_policy": acknowledgement_policy,
                 "allow_manual_completion": False,
@@ -118,8 +149,16 @@ class ReminderBackend:
         return result
 
     async def _call(self, service: str, data: dict[str, Any], *, response: bool = False) -> Any:
+        payload = dict(data)
+        if service in {"create", "list"}:
+            payload.setdefault("user_id", self.owner_user_id)
         return await self.hass.services.async_call(
-            REMINDERS_DOMAIN, service, data, blocking=True, return_response=response
+            REMINDERS_DOMAIN,
+            service,
+            payload,
+            blocking=True,
+            context=Context(user_id=self.owner_user_id),
+            return_response=response,
         )
 
     @staticmethod
@@ -146,9 +185,9 @@ class ReminderBackend:
             )
         ) and due.startswith(wanted["due"][:10])
 
-    async def async_reconcile(self, item: ExpiryItem | None) -> None:
+    async def async_reconcile(self, item: ExpiryItem | None) -> bool:
         if not reminders_available(self.hass) or item is None:
-            return
+            return False
         try:
             listed = await self._call(
                 "list", {"source": REMINDERS_SOURCE, "source_id": item.id}, response=True
@@ -179,12 +218,14 @@ class ReminderBackend:
                         await self._call("update", {"reminder_id": reminder_id, **wanted})
             for wanted in expected.values():
                 await self._call("create", wanted)
+            return True
         except Exception:  # A temporarily unavailable optional backend must not break items.
             _LOGGER.warning("Could not reconcile Expiry Tracker reminders", exc_info=True)
+            return False
 
-    async def async_removed(self, item: ExpiryItem) -> None:
+    async def async_removed(self, item: ExpiryItem) -> bool:
         if not reminders_available(self.hass):
-            return
+            return False
         try:
             listed = await self._call(
                 "list", {"source": REMINDERS_SOURCE, "source_id": item.id}, response=True
@@ -196,22 +237,46 @@ class ReminderBackend:
                     and (reminder_id := self._id(reminder))
                 ):
                     await self._call("delete", {"reminder_id": reminder_id})
+            return True
         except Exception:
             _LOGGER.warning("Could not remove Expiry Tracker reminders", exc_info=True)
+            return False
 
     async def async_changed(self, action: str, item: ExpiryItem | None) -> None:
         if item is None:
             return
-        if action == "delete":
+        success = (
             await self.async_removed(item)
-        else:
-            await self.async_reconcile(item)
+            if action == "delete"
+            else await self.async_reconcile(item)
+        )
+        if not success:
+            self.hass.data["expiry_tracker_reminders_active"] = False
+            self.manager.set_change_listener(None)
+            _LOGGER.warning(
+                "Expiry Tracker disabled Reminders delivery after reconciliation failed; "
+                "built-in notifications remain available"
+            )
 
-    async def async_reconcile_all(self) -> None:
+    async def async_reconcile_all(self) -> bool:
+        """Verify owner access and reconcile every active Expiry Tracker item."""
+        try:
+            listed = await self._call("list", {"source": REMINDERS_SOURCE}, response=True)
+            if not isinstance(listed, dict) or not isinstance(listed.get("reminders"), list):
+                raise ValueError("reminders.list returned an invalid response")
+        except Exception:
+            _LOGGER.warning(
+                "Could not verify Expiry Tracker access to the Reminders owner", exc_info=True
+            )
+            return False
         for item in self.manager.list_items():
-            await self.async_reconcile(item)
+            if not await self.async_reconcile(item):
+                return False
+        return True
 
     async def async_lifecycle(self, event: Event[Any]) -> None:
+        if not self.hass.data.get("expiry_tracker_reminders_active"):
+            return
         data = event.data
         if data.get("source") != REMINDERS_SOURCE:
             return
@@ -267,12 +332,16 @@ class ReminderBackend:
 async def async_setup_reminders(
     hass: HomeAssistant, entry: Any, manager: ExpiryTrackerManager
 ) -> CALLBACK_TYPE | None:
-    """Enable the adapter only when opted in and the public contract exists."""
+    """Enable the adapter only after its owner and public service contract are verified."""
+    hass.data["expiry_tracker_reminders_active"] = False
     if not entry.options.get(CONF_USE_REMINDERS, False) or not reminders_available(hass):
-        hass.data["expiry_tracker_reminders_active"] = False
         return None
-    backend = ReminderBackend(hass, manager)
+    owner_user_id = await _owner_user_id(hass)
+    if owner_user_id is None:
+        return None
+    backend = ReminderBackend(hass, manager, owner_user_id)
+    if not await backend.async_reconcile_all():
+        return None
     manager.set_change_listener(backend.async_changed)
     hass.data["expiry_tracker_reminders_active"] = True
-    await backend.async_reconcile_all()
     return hass.bus.async_listen(REMINDERS_LIFECYCLE_EVENT, backend.async_lifecycle)
