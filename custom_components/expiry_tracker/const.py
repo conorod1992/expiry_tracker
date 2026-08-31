@@ -30,7 +30,9 @@ RENEWAL_REQUESTED_EVENT: Final = "expiry_tracker_renewal_requested"
 
 PANEL_URL: Final = "expiry-tracker"
 PANEL_ELEMENT: Final = "expiry-tracker-panel"
-PANEL_STATIC_URL: Final = "/expiry_tracker_static"
+# Version the static root, not only the entry module. Relative imports then inherit
+# the same cache-busting path instead of being served from an unversioned URL.
+PANEL_STATIC_URL: Final = f"/expiry_tracker_static/{VERSION}"
 MAX_LIST_LIMIT: Final = 500
 MAX_QUERY_LIMIT: Final = 500
 MAX_HISTORY: Final = 50
