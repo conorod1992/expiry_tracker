@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Callable, Coroutine
 from datetime import timedelta
 from functools import wraps
 from typing import Any, NoReturn
@@ -36,7 +36,7 @@ QUERIES = (
     "get_between",
 )
 _UPDATE_KEYS = {str(key.schema) for key in UPDATE_FIELDS}
-_ServiceHandler = Callable[[ServiceCall], Awaitable[dict[str, Any]]]
+_ServiceHandler = Callable[[ServiceCall], Coroutine[Any, Any, dict[str, Any]]]
 
 
 def _error(err: Exception) -> NoReturn:
