@@ -19,6 +19,25 @@ class StorageProtocol(Protocol):
     async def async_save(self, records: list[dict[str, Any]]) -> None: ...
 
 
+_ATTENTION_STATE_FIELDS = frozenset(
+    {
+        "expiry_date",
+        "requires_action",
+        "actionable_mode",
+        "actionable_offset_value",
+        "actionable_offset_unit",
+        "actionable_from",
+        "urgent_days_before",
+    }
+)
+_NOTIFICATION_STATE_FIELDS = _ATTENTION_STATE_FIELDS | {
+    "warning_thresholds",
+    "notify_actionable",
+    "notify_urgent",
+    "notify_expiry",
+}
+
+
 def _system_local_date(value: datetime | None = None) -> date:
     """Fallback for standalone users of the manager outside Home Assistant."""
     return value.astimezone().date() if value is not None else datetime.now(UTC).astimezone().date()
@@ -99,6 +118,25 @@ class ExpiryTrackerManager:
         async with self._lock:
             old = self.get_item(item_id)
             new = old.updated(changes)
+            attention_changed = any(
+                getattr(old, field) != getattr(new, field) for field in _ATTENTION_STATE_FIELDS
+            )
+            notifications_changed = any(
+                getattr(old, field) != getattr(new, field) for field in _NOTIFICATION_STATE_FIELDS
+            )
+            if attention_changed or notifications_changed:
+                payload = new.to_dict()
+                if attention_changed:
+                    payload.update(
+                        {
+                            "acknowledged": False,
+                            "acknowledged_stage": None,
+                            "acknowledged_at": None,
+                        }
+                    )
+                if notifications_changed:
+                    payload["last_notifications"] = {}
+                new = ExpiryItem.from_dict(payload)
             self._items[item_id] = new
             try:
                 await self._save()

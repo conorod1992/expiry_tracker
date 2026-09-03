@@ -44,6 +44,70 @@ def test_action_type_defaults_and_custom_validation():
         ExpiryItem.create(item_data(action_type="archive"))
 
 
+async def test_workflow_edit_resets_acknowledgement_and_notification_history():
+    manager = ExpiryTrackerManager(
+        MemoryStorage(),
+        lambda: None,
+        local_date=lambda value=None: date(2026, 9, 3),
+    )
+    await manager.async_load()
+    item = await manager.async_create_item(
+        item_data(expiry_date="2026-10-03", actionable_mode="immediate")
+    )
+    item = await manager.async_acknowledge(item.id)
+    await manager.async_record_notification(item.id, "actionable", "2026-09-03T08:00:00Z")
+
+    updated = await manager.async_update_item(item.id, {"expiry_date": "2027-10-03"})
+
+    assert not updated.acknowledged
+    assert updated.acknowledged_stage is None
+    assert updated.acknowledged_at is None
+    assert updated.last_notifications == {}
+
+
+async def test_notification_rule_edit_only_resets_notification_history():
+    manager = ExpiryTrackerManager(
+        MemoryStorage(),
+        lambda: None,
+        local_date=lambda value=None: date(2026, 9, 3),
+    )
+    await manager.async_load()
+    item = await manager.async_create_item(
+        item_data(expiry_date="2026-10-03", actionable_mode="immediate")
+    )
+    item = await manager.async_acknowledge(item.id)
+    await manager.async_record_notification(item.id, "actionable", "2026-09-03T08:00:00Z")
+
+    updated = await manager.async_update_item(item.id, {"warning_thresholds": [60, 30, 7]})
+
+    assert updated.acknowledged
+    assert updated.acknowledged_stage == item.acknowledged_stage
+    assert updated.acknowledged_at == item.acknowledged_at
+    assert updated.last_notifications == {}
+
+
+async def test_metadata_edit_preserves_workflow_state():
+    manager = ExpiryTrackerManager(
+        MemoryStorage(),
+        lambda: None,
+        local_date=lambda value=None: date(2026, 9, 3),
+    )
+    await manager.async_load()
+    item = await manager.async_create_item(
+        item_data(expiry_date="2026-10-03", actionable_mode="immediate")
+    )
+    item = await manager.async_acknowledge(item.id)
+    await manager.async_record_notification(item.id, "actionable", "2026-09-03T08:00:00Z")
+    before = manager.get_item(item.id)
+
+    updated = await manager.async_update_item(item.id, {"notes": "Updated paperwork notes"})
+
+    assert updated.acknowledged == before.acknowledged
+    assert updated.acknowledged_stage == before.acknowledged_stage
+    assert updated.acknowledged_at == before.acknowledged_at
+    assert updated.last_notifications == before.last_notifications
+
+
 async def test_reminders_use_configured_completion_wording(monkeypatch):
     manager = ExpiryTrackerManager(MemoryStorage(), lambda: None)
     await manager.async_load()
