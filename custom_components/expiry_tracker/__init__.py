@@ -56,7 +56,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ExpiryTrackerConfigEntry
     await async_register_services(hass)
     if unsubscribe := await async_setup_reminders(hass, entry, manager):
         entry.async_on_unload(unsubscribe)
-    entry.async_on_unload(async_setup_reminder_recovery(hass))
+    entry.async_on_unload(async_setup_reminder_recovery(hass, entry))
     entry.async_on_unload(async_setup_notifications(hass, entry))
     await _setup_frontend(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
