@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -128,14 +129,14 @@ def main() -> None:
     if args.check:
         if args.version is not None:
             parser.error("--check does not accept a target version")
-        print(current_version())
+        sys.stdout.write(f"{current_version()}\n")
         return
     if args.version is None:
         parser.error("a target version is required unless --check is used")
 
     before = current_version()
     set_release_version(args.version)
-    print(f"Staged release version {before} -> {args.version}")
+    sys.stdout.write(f"Staged release version {before} -> {args.version}\n")
 
 
 if __name__ == "__main__":
