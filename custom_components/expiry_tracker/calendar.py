@@ -63,8 +63,12 @@ class ExpiryTrackerCalendar(CalendarEntity):
         self, hass: HomeAssistant, start_date: datetime, end_date: datetime
     ) -> list[CalendarEvent]:
         start, end = start_date.date(), end_date.date()
-        return [
-            self._event(item)
-            for item in self._manager.list_items()
-            if item.enabled and not item.closed and start <= item.expiry_date < end
-        ]
+        items = sorted(
+            (
+                item
+                for item in self._manager.list_items()
+                if item.enabled and not item.closed and start <= item.expiry_date < end
+            ),
+            key=lambda item: (item.expiry_date, item.name.casefold(), item.id),
+        )
+        return [self._event(item) for item in items]
