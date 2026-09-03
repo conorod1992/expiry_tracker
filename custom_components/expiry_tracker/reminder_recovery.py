@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.helpers.event import async_track_time_interval
@@ -31,7 +31,7 @@ async def async_recover_reminders(hass: HomeAssistant) -> bool:
 def async_setup_reminder_recovery(hass: HomeAssistant) -> CALLBACK_TYPE:
     """Periodically retry only a previously configured but inactive backend."""
 
-    async def scheduled(_now) -> None:
+    async def scheduled(_now: datetime) -> None:
         await async_recover_reminders(hass)
 
     return async_track_time_interval(hass, scheduled, _RECOVERY_INTERVAL)
