@@ -60,8 +60,7 @@ def _match_once(root: Path, spec: VersionSpec) -> tuple[str, str]:
     matches = list(re.finditer(spec.extract_pattern, text, spec.flags))
     if len(matches) != 1:
         raise RuntimeError(
-            f"Expected exactly one {spec.label} version in {spec.path}; "
-            f"found {len(matches)}"
+            f"Expected exactly one {spec.label} version in {spec.path}; found {len(matches)}"
         )
     return text, matches[0].group(1)
 
@@ -106,8 +105,7 @@ def set_release_version(version: str, root: Path = ROOT) -> None:
         )
         if count != 1:
             raise RuntimeError(
-                f"Expected exactly one writable {spec.label} version in {spec.path}; "
-                f"found {count}"
+                f"Expected exactly one writable {spec.label} version in {spec.path}; found {count}"
             )
         path.write_text(updated, encoding="utf-8")
 
