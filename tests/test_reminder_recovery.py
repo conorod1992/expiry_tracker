@@ -81,7 +81,10 @@ async def test_missing_backend_retries_normal_setup(monkeypatch):
         options={CONF_USE_REMINDERS: True},
         async_on_unload=unload_callbacks.append,
     )
-    unsubscribe = lambda: None
+
+    def unsubscribe():
+        return None
+
     calls = 0
 
     monkeypatch.setattr(
